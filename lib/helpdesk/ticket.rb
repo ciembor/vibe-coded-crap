@@ -377,6 +377,14 @@ module Helpdesk
       !merged_into_id.nil?
     end
 
+    def duplicate_key
+      [normalized_duplicate_title, normalized_duplicate_description].join("|")
+    end
+
+    def duplicate_title_key
+      normalized_duplicate_title
+    end
+
     def valid_for_type?
       validation_errors.empty?
     end
@@ -666,6 +674,14 @@ module Helpdesk
 
     def next_attachment_id
       (attachments.map { |attachment| attachment["id"].to_i }.max || 0) + 1
+    end
+
+    def normalized_duplicate_title
+      title.to_s.downcase.gsub(/[^a-z0-9]+/, " ").strip.squeeze(" ")
+    end
+
+    def normalized_duplicate_description
+      description.to_s.downcase.gsub(/[^a-z0-9]+/, " ").strip.squeeze(" ")
     end
   end
 end

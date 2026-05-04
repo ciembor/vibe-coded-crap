@@ -71,6 +71,7 @@ module Helpdesk
         when "analytics" then analytics(args)
         when "report" then report(args)
         when "sort" then manage_sorting(args)
+        when "duplicates" then duplicates(args)
         when "remind" then remind(args)
         when "reminders" then reminders
         when "dashboard" then dashboard
@@ -166,6 +167,7 @@ module Helpdesk
           sort rules show
           sort rules set FIELD [FIELD ...]
           sort rules reset
+          duplicates [--ticket ID]
           dashboard
           stats
           export csv [PATH]
@@ -242,6 +244,7 @@ module Helpdesk
       show_attachments(ticket, visibility)
       show_custom_fields(ticket, visibility)
       show_escalation_history(ticket)
+      show_duplicate_candidates(ticket)
       activity = activity_entries_for_ticket(ticket.id)
       puts "Activity:"
       if activity.empty?
@@ -291,6 +294,7 @@ module Helpdesk
         reminder_repeat: reminder_repeat,
         tags: tags
       )
+      report_duplicate_candidates(ticket)
       log_action("ticket.create", "ticket ##{ticket.id}", title: ticket.title, status: ticket.status, priority: ticket.priority)
       puts "Created ticket ##{ticket.id}."
     rescue ArgumentError => e
@@ -1170,6 +1174,7 @@ module Helpdesk
       counts = tickets.group_by(&:status).transform_values(&:count)
       priority_counts = tickets.group_by(&:priority).transform_values(&:count)
       escalation_count = tickets.count(&:escalation_needed?)
+      duplicate_groups = @store.duplicate_groups
       sla_warning_count = tickets.count { |ticket| ticket.sla_status == "warning" }
       sla_breach_count = tickets.count { |ticket| ticket.sla_status == "breached" }
       recent_tickets = tickets.sort_by { |ticket| ticket.updated_at.to_s }.reverse.take(5)
@@ -1187,6 +1192,7 @@ module Helpdesk
       puts "Overdue: #{tickets.count(&:overdue?)}"
       puts "Due reminders: #{tickets.count(&:reminder_due?)}"
       puts "Escalations needed: #{escalation_count}"
+      puts "Duplicate groups: #{duplicate_groups.count}"
       puts "SLA warnings: #{sla_warning_count}"
       puts "SLA breaches: #{sla_breach_count}"
       puts "Total comments: #{tickets.sum { |ticket| ticket.comments.count }}"
@@ -1274,6 +1280,34 @@ module Helpdesk
       end
     rescue ArgumentError => e
       puts e.message
+    end
+
+    def duplicates(args)
+      options = parse_duplicate_options(args)
+      if options[:ticket]
+        ticket = @store.find(options[:ticket])
+        return puts "Ticket not found." unless ticket
+
+        candidates = @store.duplicate_candidates_for(ticket)
+        if candidates.empty?
+          puts "No duplicate candidates for ticket ##{ticket.id}."
+        else
+          puts "Duplicate candidates for ticket ##{ticket.id}:"
+          candidates.each { |candidate| puts "  #{format_ticket_row(candidate)}" }
+        end
+        return
+      end
+
+      groups = @store.duplicate_groups
+      if groups.empty?
+        puts "No duplicate tickets found."
+        return
+      end
+
+      groups.each_with_index do |group, index|
+        puts "Group #{index + 1}:"
+        group.each { |ticket| puts "  #{format_ticket_row(ticket)}" }
+      end
     end
 
     def manage_sort_rules(args)
@@ -1368,6 +1402,7 @@ module Helpdesk
       when "json"
         path = args[1] || prompt("JSON path", "data/tickets-export.json")
         count = @store.import_json(path)
+        report_duplicate_groups
         log_action("tickets.import", "tickets", source: path, count: count)
         puts "Imported #{count} tickets from #{path}."
       else
@@ -1855,6 +1890,18 @@ module Helpdesk
       entries.each { |entry| puts "  #{format_escalation_history_entry(entry)}" }
     end
 
+    def show_duplicate_candidates(ticket)
+      candidates = @store.duplicate_candidates_for(ticket)
+      puts "Possible duplicates:"
+      if candidates.empty?
+        puts "  none"
+      else
+        candidates.each do |candidate|
+          puts "  #{format_ticket_row(candidate)}"
+        end
+      end
+    end
+
     def show_sla_rules
       rules = @sla_rules.all
       rules.each do |priority, rule|
@@ -1991,6 +2038,29 @@ module Helpdesk
       print_top_tags(tickets)
     end
 
+    def report_duplicate_candidates(ticket)
+      candidates = @store.duplicate_candidates_for(ticket)
+      return if candidates.empty?
+
+      puts "Warning: possible duplicates found for ticket ##{ticket.id}:"
+      candidates.each do |candidate|
+        puts "  #{format_ticket_row(candidate)}"
+      end
+    end
+
+    def report_duplicate_groups
+      groups = @store.duplicate_groups
+      return if groups.empty?
+
+      puts "Duplicate ticket groups detected:"
+      groups.each_with_index do |group, index|
+        puts "  Group #{index + 1}:"
+        group.each do |ticket|
+          puts "    #{format_ticket_row(ticket)}"
+        end
+      end
+    end
+
     def report_weekly(date_string = nil)
       reference_date = parse_report_date(date_string) || Date.today - 7
       week_start = reference_date - (reference_date.wday - 1) % 7
@@ -2116,6 +2186,21 @@ module Helpdesk
       Date.parse(value.to_s)
     rescue ArgumentError
       nil
+    end
+
+    def parse_duplicate_options(args)
+      options = {}
+      idx = 0
+      while idx < args.length
+        case args[idx]
+        when "--ticket"
+          options[:ticket] = args[idx + 1].to_i
+          idx += 2
+        else
+          idx += 1
+        end
+      end
+      options
     end
 
     def reminders

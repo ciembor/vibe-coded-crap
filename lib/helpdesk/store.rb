@@ -18,6 +18,22 @@ module Helpdesk
       load_data.map { |row| Ticket.from_h(row) }
     end
 
+    def duplicate_groups
+      tickets = all.reject(&:archived?)
+      tickets.group_by(&:duplicate_key).values.select { |group| group.count > 1 }
+    end
+
+    def duplicate_candidates_for(ticket, limit: 5)
+      key = ticket.duplicate_key
+      candidates = all.reject { |existing| existing.id.to_i == ticket.id.to_i }
+      matches =
+        candidates.select do |existing|
+          existing.duplicate_key == key ||
+            existing.duplicate_title_key == ticket.duplicate_title_key
+        end
+      matches.sort_by { |existing| [existing.status == "closed" ? 1 : 0, existing.updated_at.to_s] }.take(limit)
+    end
+
     def find(id)
       all.find { |ticket| ticket.id.to_i == id.to_i }
     end
