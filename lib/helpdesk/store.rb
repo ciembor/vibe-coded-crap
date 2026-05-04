@@ -1,5 +1,6 @@
 require "json"
 require "fileutils"
+require "helpdesk/bulk_action_log"
 require "helpdesk/ticket"
 
 module Helpdesk
@@ -8,6 +9,7 @@ module Helpdesk
 
     def initialize(path: default_path)
       @path = path
+      @bulk_action_log = BulkActionLog.new
       FileUtils.mkdir_p(File.dirname(path))
       save!([]) unless File.exist?(path)
     end
@@ -68,10 +70,12 @@ module Helpdesk
 
       tickets = load_data
       closed_ids = []
+      affected_rows = []
 
       tickets.each do |row|
         next unless id_list.include?(row["id"].to_i)
 
+        affected_rows << row.dup
         ticket = Ticket.from_h(row)
         ticket.update(status: "closed")
         row.replace(ticket.to_h)
@@ -79,6 +83,7 @@ module Helpdesk
       end
 
       save!(tickets)
+      @bulk_action_log.append(action: "bulk_close", rows: affected_rows) unless affected_rows.empty?
       closed_ids
     end
 
@@ -89,10 +94,12 @@ module Helpdesk
 
       tickets = load_data
       touched_ids = []
+      affected_rows = []
 
       tickets.each do |row|
         next unless id_list.include?(row["id"].to_i)
 
+        affected_rows << row.dup
         ticket = Ticket.from_h(row)
         case action
         when "add"
@@ -107,6 +114,7 @@ module Helpdesk
       end
 
       save!(tickets)
+      @bulk_action_log.append(action: "bulk_tag_#{action}", rows: affected_rows, metadata: { "tag" => tag }) unless affected_rows.empty?
       touched_ids
     end
 
@@ -177,6 +185,26 @@ module Helpdesk
       tickets[source_index] = source.to_h
       save!(tickets)
       { source: source, target: target }
+    end
+
+    def undo_last_bulk_action
+      entry = @bulk_action_log.pop_last
+      return nil unless entry
+
+      rows = entry["rows"] || []
+      return nil if rows.empty?
+
+      tickets = load_data
+      rows.each do |row|
+        index = tickets.index { |existing| existing["id"].to_i == row["id"].to_i }
+        if index
+          tickets[index] = row
+        else
+          tickets << row
+        end
+      end
+      save!(tickets)
+      entry
     end
 
     def import_json(path)

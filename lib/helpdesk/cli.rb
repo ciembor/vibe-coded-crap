@@ -38,6 +38,7 @@ module Helpdesk
         when "edit" then edit_ticket(args)
         when "delete" then delete_ticket(args)
         when "close" then close_tickets(args)
+        when "undo" then undo(args)
         when "merge" then merge_tickets(args)
         when "status" then change_status(args)
         when "comment" then add_comment(args)
@@ -96,6 +97,7 @@ module Helpdesk
           edit ID
           delete ID
           close ID [ID ...]
+          undo
           merge SOURCE_ID TARGET_ID
           status ID STATUS
           comment ID TEXT
@@ -387,6 +389,22 @@ module Helpdesk
         closed_ids.each { |ticket_id| log_action("ticket.close", "ticket ##{ticket_id}") }
         puts "Closed tickets: #{closed_ids.map { |id| "##{id}" }.join(", ")}"
       end
+    end
+
+    def undo(args)
+      return unless require_permission!(:ticket_write)
+
+      action = args[0]
+      return puts "Usage: undo" if action && action != "last"
+
+      entry = @store.undo_last_bulk_action
+      unless entry
+        puts "No bulk actions to undo."
+        return
+      end
+
+      log_action("bulk.undo", "bulk action ##{entry["id"]}", action: entry["action"])
+      puts "Undid #{entry["action"].to_s.tr('_', ' ')}."
     end
 
     def merge_tickets(args)
