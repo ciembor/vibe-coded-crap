@@ -229,9 +229,42 @@ module Helpdesk
         raise ArgumentError, "import file must contain an array of tickets"
       end
 
-      tickets = rows.map { |row| Ticket.from_h(row).to_h }
+      tickets = load_data
+      imported = 0
+      merged = 0
+      remapped = 0
+
+      rows.each do |row|
+        imported_ticket = Ticket.from_h(row)
+        existing_index = tickets.index { |existing| existing["id"].to_i == imported_ticket.id.to_i }
+        duplicate_index = tickets.index do |existing|
+          existing_ticket = Ticket.from_h(existing)
+          existing_ticket.duplicate_key == imported_ticket.duplicate_key
+        end
+
+        if duplicate_index
+          merged_ticket = merge_imported_ticket(Ticket.from_h(tickets[duplicate_index]), imported_ticket)
+          tickets[duplicate_index] = merged_ticket.to_h
+          merged += 1
+        elsif existing_index
+          remapped_ticket = Ticket.from_h(imported_ticket.to_h)
+          remapped_ticket.id = next_id(tickets)
+          remapped_ticket.normalize!
+          tickets << remapped_ticket.to_h
+          remapped += 1
+        else
+          tickets << imported_ticket.to_h
+        end
+
+        imported += 1
+      end
+
       save!(tickets)
-      tickets.count
+      {
+        imported: imported,
+        merged: merged,
+        remapped: remapped
+      }
     rescue Errno::ENOENT
       raise ArgumentError, "import file not found: #{path}"
     rescue JSON::ParserError
@@ -263,6 +296,107 @@ module Helpdesk
       return if errors.empty?
 
       raise ArgumentError, errors.join("; ")
+    end
+
+    def merge_imported_ticket(existing_ticket, imported_ticket)
+      existing = Ticket.from_h(existing_ticket.to_h)
+      source = imported_ticket
+
+      existing.title = choose_nonempty(existing.title, source.title)
+      existing.description = choose_nonempty(existing.description, source.description)
+      existing.status = choose_status(existing.status, source.status)
+      existing.priority = choose_priority(existing.priority, source.priority)
+      existing.ticket_type = choose_nonempty(existing.ticket_type, source.ticket_type)
+      existing.due_at = choose_due_at(existing.due_at, source.due_at)
+      existing.reminder_at = choose_reminder_at(existing.reminder_at, source.reminder_at)
+      existing.reminder_repeat = choose_nonempty(existing.reminder_repeat, source.reminder_repeat)
+      existing.tags = (existing.tags + source.tags).uniq.sort
+      existing.watchers = (existing.watchers + source.watchers).uniq.sort
+      existing.pinned = existing.pinned? || source.pinned?
+      existing.archived = existing.archived? || source.archived?
+      existing.custom_fields = existing.custom_fields.merge(source.custom_fields) do |_key, left, right|
+        left.to_s.strip.empty? ? right : left
+      end
+
+      source.comments.each do |comment|
+        existing.add_comment(
+          body: "[Imported from ##{source.id}] #{comment["body"]}",
+          author: comment["author"]
+        )
+      end
+
+      source.internal_notes.each do |note|
+        existing.add_internal_note(
+          body: "[Imported from ##{source.id}] #{note["body"]}",
+          author: note["author"]
+        )
+      end
+
+      source.attachments.each do |attachment|
+        existing.add_attachment(
+          name: "[Imported from ##{source.id}] #{attachment["name"]}",
+          content_type: attachment["content_type"],
+          size: attachment["size"],
+          description: attachment["description"],
+          uploaded_by: attachment["uploaded_by"]
+        )
+      end
+
+      existing.normalize!
+    end
+
+    def choose_nonempty(current, incoming)
+      current.to_s.strip.empty? ? incoming : current
+    end
+
+    def choose_status(current, incoming)
+      order = %w[open in_progress waiting resolved closed]
+      current_index = order.index(current.to_s) || order.length
+      incoming_index = order.index(incoming.to_s) || order.length
+      incoming_index < current_index ? incoming : current
+    end
+
+    def choose_priority(current, incoming)
+      order = %w[urgent high medium low]
+      current_index = order.index(current.to_s) || order.length
+      incoming_index = order.index(incoming.to_s) || order.length
+      incoming_index < current_index ? incoming : current
+    end
+
+    def choose_due_at(current, incoming)
+      current_date = parse_date(current)
+      incoming_date = parse_date(incoming)
+      return incoming if current_date.nil? && incoming_date
+      return current if incoming_date.nil? && current_date
+      return current if current_date.nil? && incoming_date.nil?
+
+      incoming_date < current_date ? incoming : current
+    end
+
+    def choose_reminder_at(current, incoming)
+      current_time = parse_time(current)
+      incoming_time = parse_time(incoming)
+      return incoming if current_time.nil? && incoming_time
+      return current if incoming_time.nil? && current_time
+      return current if current_time.nil? && incoming_time.nil?
+
+      incoming_time < current_time ? incoming : current
+    end
+
+    def parse_date(value)
+      return nil if value.to_s.strip.empty?
+
+      Date.parse(value.to_s)
+    rescue ArgumentError
+      nil
+    end
+
+    def parse_time(value)
+      return nil if value.to_s.strip.empty?
+
+      Time.parse(value.to_s).utc
+    rescue ArgumentError
+      nil
     end
   end
 end

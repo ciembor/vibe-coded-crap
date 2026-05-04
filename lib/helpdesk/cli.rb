@@ -1401,10 +1401,11 @@ module Helpdesk
       case format
       when "json"
         path = args[1] || prompt("JSON path", "data/tickets-export.json")
-        count = @store.import_json(path)
+        summary = @store.import_json(path)
         report_duplicate_groups
-        log_action("tickets.import", "tickets", source: path, count: count)
-        puts "Imported #{count} tickets from #{path}."
+        log_action("tickets.import", "tickets", source: path, imported: summary[:imported], merged: summary[:merged], remapped: summary[:remapped])
+        puts "Imported #{summary[:imported]} tickets from #{path}."
+        puts "Resolved #{summary[:merged]} duplicate merges and #{summary[:remapped]} ID conflicts."
       else
         puts "Usage: import json [PATH]"
       end
