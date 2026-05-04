@@ -11,6 +11,7 @@ require "helpdesk/sla_rule_store"
 require "helpdesk/sort_rule_store"
 require "helpdesk/template_store"
 require "helpdesk/user_store"
+require "helpdesk/workflow_store"
 require "helpdesk/webhook_store"
 
 module Helpdesk
@@ -28,7 +29,9 @@ module Helpdesk
       @templates = TemplateStore.new
       @users = UserStore.new
       @api_tokens = ApiTokenStore.new
+      @workflows = WorkflowStore.new
       @webhooks = WebhookStore.new
+      reload_ticket_workflows!
       @api_rate_limit = API_RATE_LIMIT
       @api_rate_window_seconds = API_RATE_WINDOW_SECONDS
       @api_response_cache = {}
@@ -85,6 +88,7 @@ module Helpdesk
         when "analytics" then analytics(args)
         when "report" then report(args)
         when "sort" then manage_sorting(args)
+        when "workflow" then manage_workflows(args)
         when "duplicates" then duplicates(args)
         when "remind" then remind(args)
         when "reminders" then reminders
@@ -193,6 +197,9 @@ module Helpdesk
           sort rules show
           sort rules set FIELD [FIELD ...]
           sort rules reset
+          workflow show
+          workflow set TYPE STATUS [STATUS ...]
+          workflow reset [TYPE|all]
           duplicates [--ticket ID]
           dashboard
           stats
@@ -303,9 +310,9 @@ module Helpdesk
       end
       title_default = template ? template.title : ""
       description_default = template ? template.description : ""
-      status_default = template ? template.status : "open"
       priority_default = template ? template.priority : "medium"
       ticket_type_default = template ? template.ticket_type : "general"
+      status_default = template ? template.status : Ticket.initial_status_for(ticket_type_default)
       tags_default = template ? template.tags.join(", ") : ""
       custom_fields_default = template ? template.custom_fields : {}
 
@@ -1039,7 +1046,7 @@ module Helpdesk
       ticket_type = prompt("Ticket type (general, bug, feature, incident)", "general")
       title = prompt("Title", "")
       description = prompt("Description", "")
-      status = prompt("Status", "open")
+      status = prompt("Status", Ticket.initial_status_for(ticket_type))
       priority = prompt("Priority", "medium")
       tags = prompt("Tags (comma separated)", "").split(",").map(&:strip).reject(&:empty?)
       custom_fields = prompt_custom_fields_for_type(ticket_type)
@@ -1502,6 +1509,41 @@ module Helpdesk
       puts e.message
     end
 
+    def manage_workflows(args)
+      action = args[0]
+      case action
+      when nil, "show"
+        show_workflows
+      when "set"
+        return unless require_permission!(:admin)
+
+        ticket_type = args[1].to_s.strip
+        statuses = args.drop(2)
+        if ticket_type.empty? || statuses.empty?
+          puts "Usage: workflow set TYPE STATUS [STATUS ...]"
+          return
+        end
+
+        workflow = @workflows.upsert(ticket_type, statuses: statuses)
+        reload_ticket_workflows!
+        log_action("workflow.set", "workflow #{ticket_type}", workflow: workflow["statuses"])
+        puts "Updated workflow #{ticket_type}."
+      when "reset"
+        return unless require_permission!(:admin)
+
+        target = args[1].to_s.strip
+        target = "all" if target.empty?
+        @workflows.reset(target)
+        reload_ticket_workflows!
+        log_action("workflow.reset", "workflow #{target}", workflow: target)
+        puts target == "all" ? "Reset all workflows." : "Reset workflow #{target}."
+      else
+        puts "Usage: workflow show | workflow set TYPE STATUS [STATUS ...] | workflow reset [TYPE|all]"
+      end
+    rescue ArgumentError => e
+      puts e.message
+    end
+
     def duplicates(args)
       options = parse_duplicate_options(args)
       if options[:ticket]
@@ -1555,6 +1597,22 @@ module Helpdesk
       end
     rescue ArgumentError => e
       puts e.message
+    end
+
+    def show_workflows
+      workflows = @workflows.all
+      if workflows.empty?
+        puts "No workflows."
+        return
+      end
+
+      workflows.each do |workflow|
+        puts "#{workflow["ticket_type"]}: #{workflow["statuses"].join(", ")} (initial: #{workflow["initial_status"]})"
+      end
+    end
+
+    def reload_ticket_workflows!
+      Ticket.workflows = @workflows.to_workflow_hash
     end
 
     def show_sort_rules

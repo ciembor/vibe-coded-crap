@@ -17,6 +17,12 @@ module Helpdesk
       "high" => { enabled: true, trigger: "sla_warning", target_role: "admin" },
       "urgent" => { enabled: true, trigger: "overdue", target_role: "admin" }
     }.freeze
+    DEFAULT_WORKFLOWS = {
+      "general" => { name: "General", statuses: STATUSES, initial_status: "open" },
+      "bug" => { name: "Bug", statuses: STATUSES, initial_status: "open" },
+      "feature" => { name: "Feature", statuses: STATUSES, initial_status: "open" },
+      "incident" => { name: "Incident", statuses: STATUSES, initial_status: "open" }
+    }.freeze
 
     class << self
       def sla_rules
@@ -41,6 +47,26 @@ module Helpdesk
 
       def escalation_rule_for(priority)
         escalation_rules[priority.to_s]
+      end
+
+      def workflows
+        @workflows ||= normalize_workflows(DEFAULT_WORKFLOWS)
+      end
+
+      def workflows=(workflows)
+        @workflows = normalize_workflows(workflows)
+      end
+
+      def workflow_for(ticket_type)
+        workflows[ticket_type.to_s] || workflows["general"]
+      end
+
+      def workflow_statuses_for(ticket_type)
+        Array(workflow_for(ticket_type)["statuses"])
+      end
+
+      def initial_status_for(ticket_type)
+        workflow_for(ticket_type)["initial_status"].to_s
       end
 
       private
@@ -91,6 +117,47 @@ module Helpdesk
         return value if %w[admin agent viewer].include?(value)
 
         raise ArgumentError, "invalid escalation target role: #{value}"
+      end
+
+      def normalize_workflows(workflows)
+        source = workflows.is_a?(Hash) ? workflows : {}
+        source.each_with_object({}) do |(ticket_type, workflow), normalized|
+          ticket_type = ticket_type.to_s.strip
+          next if ticket_type.empty?
+
+          workflow = workflow.is_a?(Hash) ? workflow : {}
+          statuses = normalize_workflow_statuses(workflow["statuses"] || workflow[:statuses] || STATUSES)
+          initial_status = normalize_workflow_status(
+            workflow["initial_status"] || workflow[:initial_status] || statuses.first || "open"
+          )
+          if statuses.empty?
+            raise ArgumentError, "workflow #{ticket_type} must define at least one status"
+          end
+          unless statuses.include?("closed")
+            raise ArgumentError, "workflow #{ticket_type} must include closed"
+          end
+          unless statuses.include?(initial_status)
+            raise ArgumentError, "workflow #{ticket_type} initial status must be in statuses"
+          end
+
+          normalized[ticket_type] = {
+            "name" => (workflow["name"] || workflow[:name] || ticket_type.tr("_", " ").capitalize).to_s,
+            "statuses" => statuses,
+            "initial_status" => initial_status
+          }
+        end
+      end
+
+      def normalize_workflow_statuses(statuses)
+        Array(statuses).map { |status| normalize_workflow_status(status) }.reject(&:empty?).uniq
+      end
+
+      def normalize_workflow_status(status)
+        value = status.to_s.strip
+        return "" if value.empty?
+        return value if value.match?(/\A[a-zA-Z0-9_]+\z/)
+
+        value.tr(" ", "_")
       end
     end
 
@@ -163,13 +230,13 @@ module Helpdesk
     end
 
     def normalize!
-      self.status = normalize_status(status)
+      self.ticket_type = normalize_ticket_type(ticket_type)
+      self.status = normalize_status(status, ticket_type: ticket_type)
       self.priority = normalize_priority(priority)
       self.due_at = normalize_due_at(due_at)
       self.reminder_at = normalize_reminder_at(reminder_at)
       self.reminder_repeat = normalize_reminder_repeat(reminder_repeat)
       self.tags = Array(tags).map { |tag| tag.to_s.strip }.reject(&:empty?).uniq.sort
-      self.ticket_type = normalize_ticket_type(ticket_type)
       self.merged_into_id = merged_into_id.to_i.zero? ? nil : merged_into_id.to_i
       self.merged_from_ids = Array(merged_from_ids).map(&:to_i).reject(&:zero?).uniq.sort
       self.related_ids = Array(related_ids).map(&:to_i).reject(&:zero?).uniq.sort
@@ -218,7 +285,9 @@ module Helpdesk
     def update(attrs = {})
       self.title = attrs.fetch(:title, title)
       self.description = attrs.fetch(:description, description)
-      self.status = normalize_status(attrs.fetch(:status, status))
+      new_ticket_type = normalize_ticket_type(attrs.fetch(:ticket_type, ticket_type))
+      self.ticket_type = new_ticket_type
+      self.status = normalize_status(attrs.fetch(:status, status), ticket_type: new_ticket_type)
       self.priority = normalize_priority(attrs.fetch(:priority, priority))
       self.due_at = normalize_due_at(attrs.fetch(:due_at, due_at))
       self.reminder_at = normalize_reminder_at(attrs.fetch(:reminder_at, reminder_at))
@@ -236,7 +305,7 @@ module Helpdesk
         }
       end
       self.custom_fields = normalize_custom_fields(attrs.fetch(:custom_fields, custom_fields))
-      self.ticket_type = normalize_ticket_type(attrs.fetch(:ticket_type, ticket_type))
+      self.ticket_type = new_ticket_type
       self.merged_into_id = attrs.key?(:merged_into_id) ? attrs[:merged_into_id].to_i : merged_into_id.to_i
       self.merged_into_id = nil if self.merged_into_id.zero?
       self.merged_from_ids = Array(attrs.fetch(:merged_from_ids, merged_from_ids)).map(&:to_i).reject(&:zero?).uniq.sort
@@ -597,13 +666,15 @@ module Helpdesk
 
     private
 
-    def normalize_status(value)
+    def normalize_status(value, ticket_type: self.ticket_type)
       value = value.to_s.strip
-      return "open" if value.empty?
-      return value if STATUSES.include?(value)
+      allowed = self.class.workflow_statuses_for(ticket_type)
+      initial = self.class.initial_status_for(ticket_type)
+      return initial if value.empty? && !initial.empty?
+      return value if allowed.include?(value)
 
       normalized = value.tr(" ", "_")
-      return normalized if STATUSES.include?(normalized)
+      return normalized if allowed.include?(normalized)
 
       raise ArgumentError, "invalid status: #{value}"
     end

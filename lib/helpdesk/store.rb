@@ -207,17 +207,18 @@ module Helpdesk
 
     def create(attrs)
       tickets = load_data
+      ticket_type = attrs.fetch(:ticket_type, "general")
       ticket = Ticket.new(
         id: next_id(tickets),
         title: attrs.fetch(:title),
         description: attrs.fetch(:description, ""),
-        status: attrs.fetch(:status, "open"),
+        status: attrs.fetch(:status, Ticket.initial_status_for(ticket_type)),
         priority: attrs.fetch(:priority, "medium"),
         tags: attrs.fetch(:tags, []),
         internal_notes: attrs.fetch(:internal_notes, []),
         attachments: attrs.fetch(:attachments, []),
         custom_fields: attrs.fetch(:custom_fields, {}),
-        ticket_type: attrs.fetch(:ticket_type, "general"),
+        ticket_type: ticket_type,
         due_at: attrs.fetch(:due_at, nil),
         reminder_at: attrs.fetch(:reminder_at, nil),
         reminder_repeat: attrs.fetch(:reminder_repeat, nil)
