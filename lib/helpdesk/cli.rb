@@ -40,6 +40,7 @@ module Helpdesk
         when "comment" then add_comment(args)
         when "note" then add_note(args)
         when "watch" then manage_watchers(args)
+        when "attach" then manage_attachments(args)
         when "tag" then manage_tags(args)
         when "search" then search(args)
         when "overdue" then overdue
@@ -90,6 +91,9 @@ module Helpdesk
           watch add ID USER_ID
           watch remove ID USER_ID
           watch list ID
+          attach add ID NAME [CONTENT_TYPE] [SIZE] [DESCRIPTION]
+          attach remove ID ATTACHMENT_ID
+          attach list ID
           tag add ID [ID ...] TAG
           tag remove ID [ID ...] TAG
           search QUERY
@@ -172,6 +176,20 @@ module Helpdesk
           user = @users.find(watcher_id)
           label = user ? user.display_name : "user ##{watcher_id}"
           puts "  - #{label}"
+        end
+      end
+      puts "Attachments:"
+      if ticket.attachments.empty?
+        puts "  none"
+      else
+        ticket.attachments.each do |attachment|
+          details = [
+            attachment["content_type"].to_s.empty? ? nil : attachment["content_type"],
+            attachment["size"].to_i.zero? ? nil : "#{attachment["size"]} bytes",
+            attachment["description"].to_s.empty? ? nil : attachment["description"]
+          ].compact.join(" | ")
+          details = " | #{details}" unless details.empty?
+          puts "  [#{attachment["id"]}] #{attachment["name"]}#{details} (by #{attachment["uploaded_by"]} @ #{attachment["created_at"]})"
         end
       end
     end
@@ -352,6 +370,66 @@ module Helpdesk
       puts e.message
     end
 
+    def manage_attachments(args)
+      return unless require_permission!(:ticket_write)
+
+      action = args[0]
+      case action
+      when "add"
+        id = required_id(args.drop(1))
+        name = args[2]
+        content_type = args[3] || ""
+        size = args[4] || "0"
+        description = args.drop(5).join(" ")
+        return puts "Usage: attach add ID NAME [CONTENT_TYPE] [SIZE] [DESCRIPTION]" if name.to_s.strip.empty?
+
+        ticket = @store.find(id)
+        return puts "Ticket not found." unless ticket
+
+        ticket.add_attachment(
+          name: name,
+          content_type: content_type,
+          size: size,
+          description: description,
+          uploaded_by: current_user_name
+        )
+        @store.save_ticket(ticket)
+        log_action("ticket.attach_add", "ticket ##{id}", attachment: name)
+        puts "Added attachment #{name} to ticket ##{id}."
+      when "remove"
+        id = required_id(args.drop(1))
+        attachment_id = args[2]
+        return puts "Usage: attach remove ID ATTACHMENT_ID" if attachment_id.to_s.strip.empty?
+
+        ticket = @store.find(id)
+        return puts "Ticket not found." unless ticket
+
+        unless ticket.remove_attachment(attachment_id)
+          puts "Attachment not found."
+          return
+        end
+        @store.save_ticket(ticket)
+        log_action("ticket.attach_remove", "ticket ##{id}", attachment_id: attachment_id.to_i)
+        puts "Removed attachment ##{attachment_id} from ticket ##{id}."
+      when "list"
+        id = required_id(args.drop(1))
+        ticket = @store.find(id)
+        return puts "Ticket not found." unless ticket
+
+        if ticket.attachments.empty?
+          puts "No attachments."
+        else
+          ticket.attachments.each do |attachment|
+            puts "##{attachment['id']} #{attachment['name']}"
+          end
+        end
+      else
+        puts "Usage: attach add ID NAME [CONTENT_TYPE] [SIZE] [DESCRIPTION] | attach remove ID ATTACHMENT_ID | attach list ID"
+      end
+    rescue ArgumentError => e
+      puts e.message
+    end
+
     def manage_tags(args)
       return unless require_permission!(:ticket_write)
 
@@ -390,12 +468,13 @@ module Helpdesk
           ticket.title,
           ticket.description,
           ticket.status,
-          ticket.priority,
-          ticket.tags.join(" "),
-          ticket.comments.map { |comment| comment["body"] }.join(" ")
-        ].join(" ").downcase
-        haystack.include?(query)
-      end
+        ticket.priority,
+        ticket.tags.join(" "),
+        ticket.comments.map { |comment| comment["body"] }.join(" "),
+        ticket.attachments.map { |attachment| [attachment["name"], attachment["description"], attachment["content_type"]].join(" ") }.join(" ")
+      ].join(" ").downcase
+      haystack.include?(query)
+    end
 
       if matches.empty?
         puts "No tickets found."

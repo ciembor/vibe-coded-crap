@@ -30,6 +30,7 @@ module Helpdesk
         priority: attrs.fetch(:priority, "medium"),
         tags: attrs.fetch(:tags, []),
         internal_notes: attrs.fetch(:internal_notes, []),
+        attachments: attrs.fetch(:attachments, []),
         due_at: attrs.fetch(:due_at, nil),
         reminder_at: attrs.fetch(:reminder_at, nil),
         reminder_repeat: attrs.fetch(:reminder_repeat, nil)
