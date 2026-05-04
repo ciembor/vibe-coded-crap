@@ -56,6 +56,14 @@ module Helpdesk
       all.select { |existing| existing.dependency_ids.include?(ticket.id.to_i) }
     end
 
+    def open_dependencies_for(ticket)
+      dependencies_for(ticket).reject(&:closed?)
+    end
+
+    def closeable_ticket?(ticket)
+      open_dependencies_for(ticket).empty?
+    end
+
     def relate(source_id, target_id)
       source_id = source_id.to_i
       target_id = target_id.to_i
@@ -225,7 +233,15 @@ module Helpdesk
       index = tickets.index { |row| row["id"].to_i == id.to_i }
       return nil unless index
 
-      ticket = Ticket.from_h(tickets[index]).update(attrs)
+      ticket = Ticket.from_h(tickets[index])
+      if attrs.key?(:status) && ticket.send(:normalize_status, attrs[:status]) == "closed"
+        open_dependencies = open_dependencies_for(ticket)
+        unless open_dependencies.empty?
+          raise ArgumentError, "cannot close ticket ##{ticket.id} with open dependencies: #{open_dependencies.map { |dependency| "##{dependency.id}" }.join(", ")}"
+        end
+      end
+
+      ticket.update(attrs)
       validate_ticket!(ticket)
       tickets[index] = ticket.to_h
       save!(tickets)
@@ -250,8 +266,10 @@ module Helpdesk
       tickets.each do |row|
         next unless id_list.include?(row["id"].to_i)
 
-        affected_rows << row.dup
         ticket = Ticket.from_h(row)
+        next unless closeable_ticket?(ticket)
+
+        affected_rows << row.dup
         ticket.update(status: "closed")
         row.replace(ticket.to_h)
         closed_ids << ticket.id

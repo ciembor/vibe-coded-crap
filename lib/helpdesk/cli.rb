@@ -435,12 +435,19 @@ module Helpdesk
         return
       end
 
+      blocked_ids = ids.select do |id|
+        ticket = @store.find(id)
+        ticket && !@store.closeable_ticket?(ticket)
+      end
       closed_ids = @store.bulk_close(ids)
-      if closed_ids.empty?
+      if closed_ids.empty? && blocked_ids.empty?
         puts "No matching tickets found."
       else
+        if blocked_ids.any?
+          puts "Blocked by open dependencies: #{blocked_ids.map { |id| "##{id}" }.join(", ")}"
+        end
         closed_ids.each { |ticket_id| log_action("ticket.close", "ticket ##{ticket_id}") }
-        puts "Closed tickets: #{closed_ids.map { |id| "##{id}" }.join(", ")}"
+        puts "Closed tickets: #{closed_ids.map { |id| "##{id}" }.join(", ")}" if closed_ids.any?
       end
     end
 
