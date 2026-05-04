@@ -96,7 +96,7 @@ module Helpdesk
           user switch ID
           user role ID ROLE
           whoami
-          audit [--last N]
+          audit [--last N] [--action ACTION] [--actor NAME] [--subject TEXT]
           exit
       HELP
     end
@@ -484,8 +484,12 @@ module Helpdesk
     end
 
     def audit(args)
+      options = parse_audit_options(args)
       entries = @audit_log.all
-      entries = entries.last(limit_for_audit(args)) if args[0] == "--last"
+      entries = entries.select { |entry| entry["action"] == options[:action] } if options[:action]
+      entries = entries.select { |entry| entry["actor"].to_s.include?(options[:actor]) } if options[:actor]
+      entries = entries.select { |entry| entry["subject"].to_s.include?(options[:subject]) } if options[:subject]
+      entries = entries.last(options[:last]) if options[:last]
       if entries.empty?
         puts "No audit events."
         return
@@ -644,10 +648,28 @@ module Helpdesk
       @audit_log.append(action: action, actor: actor, subject: subject, details: details)
     end
 
-    def limit_for_audit(args)
-      return 10 unless args[0] == "--last"
-
-      args[1].to_i
+    def parse_audit_options(args)
+      options = {}
+      idx = 0
+      while idx < args.length
+        case args[idx]
+        when "--last"
+          options[:last] = args[idx + 1].to_i
+          idx += 2
+        when "--action"
+          options[:action] = args[idx + 1]
+          idx += 2
+        when "--actor"
+          options[:actor] = args[idx + 1]
+          idx += 2
+        when "--subject"
+          options[:subject] = args[idx + 1]
+          idx += 2
+        else
+          idx += 1
+        end
+      end
+      options
     end
 
     def require_permission!(kind)
