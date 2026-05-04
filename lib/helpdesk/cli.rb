@@ -5,6 +5,7 @@ require "json"
 require "fileutils"
 require "helpdesk/audit_log"
 require "helpdesk/store"
+require "helpdesk/sla_rule_store"
 require "helpdesk/template_store"
 require "helpdesk/user_store"
 
@@ -13,8 +14,10 @@ module Helpdesk
     def initialize(store: Store.new)
       @store = store
       @audit_log = AuditLog.new
+      @sla_rules = SlaRuleStore.new
       @templates = TemplateStore.new
       @users = UserStore.new
+      @sla_rules.reload_ticket_rules!
       seed_default_user
       @current_user = @users.all.first
     end
@@ -56,7 +59,7 @@ module Helpdesk
         when "template" then manage_templates(args)
         when "activity" then activity(args)
         when "overdue" then overdue
-        when "sla" then sla
+        when "sla" then manage_sla(args)
         when "remind" then remind(args)
         when "reminders" then reminders
         when "dashboard" then dashboard
@@ -137,6 +140,9 @@ module Helpdesk
           template delete NAME
           activity [--last N] [--ticket ID]
           sla
+          sla rules show
+          sla rules set PRIORITY WARNING_DAYS BREACH_DAYS
+          sla rules reset [PRIORITY|all]
           dashboard
           stats
           export csv [PATH]
@@ -1527,7 +1533,59 @@ module Helpdesk
       tickets.each { |ticket| puts format_ticket_row(ticket) }
     end
 
-    def sla
+    def manage_sla(args)
+      action = args[0]
+      case action
+      when nil
+        sla_warnings
+      when "rules"
+        manage_sla_rules(args.drop(1))
+      else
+        puts "Usage: sla | sla rules show | sla rules set PRIORITY WARNING_DAYS BREACH_DAYS | sla rules reset [PRIORITY|all]"
+      end
+    end
+
+    def manage_sla_rules(args)
+      action = args[0]
+      case action
+      when nil, "show"
+        show_sla_rules
+      when "set"
+        return unless require_permission!(:admin)
+
+        priority = args[1]
+        warning_days = args[2]
+        breach_days = args[3]
+        return puts "Usage: sla rules set PRIORITY WARNING_DAYS BREACH_DAYS" if [priority, warning_days, breach_days].any? { |value| value.to_s.strip.empty? }
+
+        rules = @sla_rules.set(priority, warning_days: warning_days, breach_days: breach_days)
+        @sla_rules.reload_ticket_rules!
+        log_action("sla.rules_set", "sla", priority: priority.to_s.strip.downcase, rules: rules[priority.to_s.strip.downcase])
+        puts "Updated SLA rule for #{priority}."
+      when "reset"
+        return unless require_permission!(:admin)
+
+        priority = args[1]
+        rules = @sla_rules.reset(priority)
+        @sla_rules.reload_ticket_rules!
+        log_action("sla.rules_reset", "sla", priority: priority.to_s.strip.empty? ? "all" : priority.to_s.strip.downcase, rules: rules)
+        normalized_priority = priority.to_s.strip.downcase
+        puts normalized_priority.empty? || normalized_priority == "all" ? "Reset all SLA rules." : "Reset SLA rule for #{priority}."
+      else
+        puts "Usage: sla rules show | sla rules set PRIORITY WARNING_DAYS BREACH_DAYS | sla rules reset [PRIORITY|all]"
+      end
+    rescue ArgumentError => e
+      puts e.message
+    end
+
+    def show_sla_rules
+      rules = @sla_rules.all
+      rules.each do |priority, rule|
+        puts "#{priority}: warning #{rule["warning_days"]} days, breach #{rule["breach_days"]} days"
+      end
+    end
+
+    def sla_warnings
       tickets = @store.all.select { |ticket| %w[warning breached].include?(ticket.sla_status) }
       if tickets.empty?
         puts "No SLA warnings."

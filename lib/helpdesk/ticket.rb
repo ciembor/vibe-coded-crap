@@ -5,12 +5,39 @@ module Helpdesk
   class Ticket
     STATUSES = %w[open in_progress waiting resolved closed].freeze
     PRIORITIES = %w[low medium high urgent].freeze
-    SLA_RULES = {
+    DEFAULT_SLA_RULES = {
       "low" => { warning_days: 14, breach_days: 21 },
       "medium" => { warning_days: 7, breach_days: 10 },
       "high" => { warning_days: 3, breach_days: 5 },
       "urgent" => { warning_days: 1, breach_days: 2 }
     }.freeze
+
+    class << self
+      def sla_rules
+        @sla_rules ||= DEFAULT_SLA_RULES
+      end
+
+      def sla_rules=(rules)
+        @sla_rules = normalize_sla_rules(rules)
+      end
+
+      def sla_rule_for(priority)
+        sla_rules[priority.to_s]
+      end
+
+      private
+
+      def normalize_sla_rules(rules)
+        source = rules.is_a?(Hash) ? rules : {}
+        PRIORITIES.each_with_object({}) do |priority, normalized|
+          rule = source[priority] || source[priority.to_sym] || DEFAULT_SLA_RULES[priority]
+          normalized[priority] = {
+            warning_days: rule.fetch("warning_days", rule.fetch(:warning_days, DEFAULT_SLA_RULES[priority][:warning_days])).to_i,
+            breach_days: rule.fetch("breach_days", rule.fetch(:breach_days, DEFAULT_SLA_RULES[priority][:breach_days])).to_i
+          }
+        end
+      end
+    end
 
     attr_accessor :id, :title, :description, :status, :priority, :tags, :comments, :internal_notes, :watchers, :attachments, :custom_fields, :ticket_type, :merged_into_id, :merged_from_ids, :pinned, :pinned_at, :archived, :archived_at, :created_at, :updated_at, :closed_at, :due_at, :reminder_at, :reminder_repeat
 
@@ -333,7 +360,7 @@ module Helpdesk
       age_days = sla_age_days(reference_time)
       return "none" unless age_days
 
-      rule = SLA_RULES[priority]
+      rule = sla_rule
       return "none" unless rule
 
       return "breached" if age_days >= rule[:breach_days]
@@ -357,7 +384,7 @@ module Helpdesk
     end
 
     def sla_rule
-      SLA_RULES[priority]
+      self.class.sla_rule_for(priority)
     end
 
     def reminder_due?
