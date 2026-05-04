@@ -45,6 +45,7 @@ module Helpdesk
         when "archive" then manage_archives(args)
         when "tag" then manage_tags(args)
         when "search" then search(args)
+        when "searches" then list_saved_searches
         when "activity" then activity(args)
         when "overdue" then overdue
         when "remind" then remind(args)
@@ -106,6 +107,10 @@ module Helpdesk
           tag add ID [ID ...] TAG
           tag remove ID [ID ...] TAG
           search QUERY
+          search save NAME QUERY
+          search run NAME
+          search delete NAME
+          searches
           activity [--last N] [--ticket ID]
           dashboard
           stats
@@ -560,7 +565,96 @@ module Helpdesk
     end
 
     def search(args)
-      query = args.join(" ").strip.downcase
+      action = args[0]
+      case action
+      when "save"
+        save_search(args.drop(1))
+      when "run"
+        run_saved_search(args.drop(1))
+      when "delete"
+        delete_saved_search(args.drop(1))
+      else
+        perform_search(args.join(" "))
+      end
+    end
+
+    def list_saved_searches
+      searches = @current_user.saved_searches || []
+      if searches.empty?
+        puts "No saved searches."
+        return
+      end
+
+      searches.each do |search|
+        puts "#{search["name"]}: #{search["query"]}"
+      end
+    end
+
+    def save_search(args)
+      name = args[0].to_s.strip
+      query = args.drop(1).join(" ").strip
+      if name.empty? || query.empty?
+        puts "Usage: search save NAME QUERY"
+        return
+      end
+
+      searches = (@current_user.saved_searches || []).dup
+      existing = searches.index { |search| search["name"].to_s.casecmp?(name) }
+      payload = {
+        "name" => name,
+        "query" => query,
+        "created_at" => existing ? searches[existing]["created_at"] : Time.now.utc.iso8601,
+        "updated_at" => Time.now.utc.iso8601
+      }
+      if existing
+        searches[existing] = payload
+      else
+        searches << payload
+      end
+
+      persist_saved_searches(searches)
+      log_action("user.saved_searches", "user ##{@current_user.id}", saved_searches: searches.map { |search| search["name"] })
+      puts "Saved search #{name}."
+    end
+
+    def run_saved_search(args)
+      name = args[0].to_s.strip
+      if name.empty?
+        puts "Usage: search run NAME"
+        return
+      end
+
+      search = (@current_user.saved_searches || []).find { |entry| entry["name"].to_s.casecmp?(name) }
+      unless search
+        puts "Saved search not found."
+        return
+      end
+
+      perform_search(search["query"])
+    end
+
+    def delete_saved_search(args)
+      name = args[0].to_s.strip
+      if name.empty?
+        puts "Usage: search delete NAME"
+        return
+      end
+
+      searches = (@current_user.saved_searches || []).dup
+      before = searches.length
+      searches.reject! { |search| search["name"].to_s.casecmp?(name) }
+      if searches.length == before
+        puts "Saved search not found."
+        return
+      end
+
+      persist_saved_searches(searches)
+      log_action("user.saved_searches", "user ##{@current_user.id}", saved_searches: searches.map { |search| search["name"] })
+      puts "Deleted saved search #{name}."
+    end
+
+    def perform_search(query)
+      query = query.to_s.strip.downcase
       if query.empty?
         puts "Usage: search QUERY"
         return
@@ -571,18 +665,28 @@ module Helpdesk
           ticket.title,
           ticket.description,
           ticket.status,
-        ticket.priority,
-        ticket.tags.join(" "),
-        ticket.comments.map { |comment| comment["body"] }.join(" "),
-        ticket.attachments.map { |attachment| [attachment["name"], attachment["description"], attachment["content_type"]].join(" ") }.join(" ")
-      ].join(" ").downcase
-      haystack.include?(query)
-    end
+          ticket.priority,
+          ticket.tags.join(" "),
+          ticket.comments.map { |comment| comment["body"] }.join(" "),
+          ticket.attachments.map { |attachment| [attachment["name"], attachment["description"], attachment["content_type"]].join(" ") }.join(" ")
+        ].join(" ").downcase
+        haystack.include?(query)
+      end
 
       if matches.empty?
         puts "No tickets found."
       else
         matches.each { |ticket| puts format_ticket_row(ticket) }
+      end
+    end
+
+    def persist_saved_searches(searches)
+      updated_user = @users.update(@current_user.id, saved_searches: searches)
+      if updated_user
+        @current_user = updated_user
+      else
+        @current_user.saved_searches = searches
+        @users.save_user(@current_user)
       end
     end
 
@@ -758,6 +862,7 @@ module Helpdesk
         puts "Current user: ##{@current_user.id} #{@current_user.display_name} (role: #{@current_user.role_label})"
         puts "Notification prefs: #{@current_user.notification_preferences_label}"
         puts "Suppression rules: #{@current_user.notification_suppression_rules_label}"
+        puts "Saved searches: #{@current_user.saved_searches_label}"
       else
         puts "No current user."
       end

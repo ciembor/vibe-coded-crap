@@ -4,7 +4,7 @@ module Helpdesk
   class User
     ROLES = %w[admin agent viewer].freeze
 
-    attr_accessor :id, :name, :email, :role, :notification_preferences, :notification_suppression_rules, :created_at, :updated_at
+    attr_accessor :id, :name, :email, :role, :notification_preferences, :notification_suppression_rules, :saved_searches, :created_at, :updated_at
 
     def self.from_h(hash)
       new(
@@ -14,18 +14,20 @@ module Helpdesk
         role: hash["role"],
         notification_preferences: hash["notification_preferences"] || {},
         notification_suppression_rules: hash["notification_suppression_rules"] || [],
+        saved_searches: hash["saved_searches"] || [],
         created_at: hash["created_at"],
         updated_at: hash["updated_at"]
       ).normalize!
     end
 
-    def initialize(id: nil, name: "", email: "", role: "agent", notification_preferences: {}, notification_suppression_rules: [], created_at: nil, updated_at: nil)
+    def initialize(id: nil, name: "", email: "", role: "agent", notification_preferences: {}, notification_suppression_rules: [], saved_searches: [], created_at: nil, updated_at: nil)
       @id = id
       @name = name
       @email = email
       @role = role
       @notification_preferences = notification_preferences
       @notification_suppression_rules = notification_suppression_rules
+      @saved_searches = saved_searches
       @created_at = created_at
       @updated_at = updated_at
     end
@@ -38,6 +40,7 @@ module Helpdesk
       self.role = normalize_role(role)
       self.notification_preferences = normalize_notification_preferences(notification_preferences)
       self.notification_suppression_rules = normalize_suppression_rules(notification_suppression_rules)
+      self.saved_searches = normalize_saved_searches(saved_searches)
       self.created_at ||= Time.now.utc.iso8601
       self.updated_at ||= created_at
       self
@@ -54,6 +57,9 @@ module Helpdesk
       )
       self.notification_suppression_rules = normalize_suppression_rules(
         attrs.fetch(:notification_suppression_rules, notification_suppression_rules)
+      )
+      self.saved_searches = normalize_saved_searches(
+        attrs.fetch(:saved_searches, saved_searches)
       )
       self.updated_at = Time.now.utc.iso8601
       self
@@ -77,6 +83,11 @@ module Helpdesk
       rules.empty? ? "none" : rules.join(", ")
     end
 
+    def saved_searches_label
+      searches = saved_searches || []
+      searches.empty? ? "none" : "#{searches.count} saved"
+    end
+
     def email_notifications_enabled?
       preference_enabled?("email")
     end
@@ -97,6 +108,7 @@ module Helpdesk
         "role" => role,
         "notification_preferences" => notification_preferences,
         "notification_suppression_rules" => notification_suppression_rules,
+        "saved_searches" => saved_searches,
         "created_at" => created_at,
         "updated_at" => updated_at
       }
@@ -142,6 +154,17 @@ module Helpdesk
       rules = Array(value).map { |rule| rule.to_s.strip.downcase }.reject(&:empty?).uniq.sort
       allowed = %w[all comments reminders manual watchers closed_tickets]
       rules.select { |rule| allowed.include?(rule) }
+    end
+
+    def normalize_saved_searches(value)
+      Array(value).map do |search|
+        {
+          "name" => search["name"] || search[:name] || "",
+          "query" => search["query"] || search[:query] || "",
+          "created_at" => search["created_at"] || search[:created_at] || Time.now.utc.iso8601,
+          "updated_at" => search["updated_at"] || search[:updated_at] || Time.now.utc.iso8601
+        }
+      end.reject { |search| search["name"].to_s.strip.empty? || search["query"].to_s.strip.empty? }.uniq { |search| search["name"].to_s.downcase }.sort_by { |search| search["name"].to_s.downcase }
     end
   end
 end
