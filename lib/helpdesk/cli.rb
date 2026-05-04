@@ -1803,6 +1803,7 @@ module Helpdesk
           return unless require_permission!(:ticket_write)
 
           ticket = @store.create(payload.transform_keys(&:to_sym))
+          invalidate_api_cache!
           log_action("ticket.create", "ticket ##{ticket.id}", title: ticket.title, status: ticket.status, priority: ticket.priority)
           { status: 201, data: api_ticket(ticket) }
         elsif method == "PATCH" && path.match?(%r{\A/tickets/\d+\z})
@@ -1812,6 +1813,7 @@ module Helpdesk
           ticket = @store.update(id, payload.transform_keys(&:to_sym))
           return puts(api_json_response(404, error: "Ticket not found.")) unless ticket
 
+          invalidate_api_cache!
           log_action("ticket.update", "ticket ##{id}", changes: payload)
           { status: 200, data: api_ticket(ticket) }
         elsif method == "DELETE" && path.match?(%r{\A/tickets/\d+\z})
@@ -1819,6 +1821,7 @@ module Helpdesk
 
           id = path.split("/").last
           if @store.delete(id)
+            invalidate_api_cache!
             log_action("ticket.delete", "ticket ##{id}")
             { status: 200, data: { deleted: true, id: id.to_i } }
           else
@@ -1840,12 +1843,14 @@ module Helpdesk
             url: payload["url"] || payload[:url],
             events: payload["events"] || payload[:events] || []
           )
+          invalidate_api_cache!
           { status: 201, data: webhook }
         elsif method == "DELETE" && path.match?(%r{\A/webhooks/\d+\z})
           return unless require_permission!(:admin)
 
           id = path.split("/").last
           if @webhooks.delete(id)
+            invalidate_api_cache!
             { status: 200, data: { deleted: true, id: id.to_i } }
           else
             { status: 404, error: "Webhook not found." }
@@ -1888,6 +1893,7 @@ module Helpdesk
         end
 
         token = @api_tokens.create(name: name, user_id: user_id, scopes: ["*"])
+        invalidate_api_cache!
         user = @users.find(token["user_id"])
         puts "Created API token ##{token["id"]} for #{user ? user.display_name : "user ##{token["user_id"]}"}."
         puts "Token: #{token["token"]}"
@@ -1897,6 +1903,7 @@ module Helpdesk
         id = required_id(args.drop(1))
         token = @api_tokens.revoke(id)
         if token
+          invalidate_api_cache!
           puts "Revoked API token ##{id}."
         else
           puts "API token not found."
@@ -1940,6 +1947,10 @@ module Helpdesk
       value = yield
       @api_response_cache[normalized_key] = { value: value, cached_at: Time.now.utc }
       value
+    end
+
+    def invalidate_api_cache!
+      @api_response_cache.clear
     end
 
     def parse_api_body(body)
