@@ -65,6 +65,7 @@ module Helpdesk
         when "sla" then manage_sla(args)
         when "escalation" then manage_escalation(args)
         when "escalations" then escalations
+        when "escalate" then escalate_ticket(args)
         when "remind" then remind(args)
         when "reminders" then reminders
         when "dashboard" then dashboard
@@ -149,6 +150,8 @@ module Helpdesk
           sla rules set PRIORITY WARNING_DAYS BREACH_DAYS
           sla rules reset [PRIORITY|all]
           escalations
+          escalate ID [NOTE]
+          escalation history [--last N] [--ticket ID]
           escalation rules show
           escalation rules set PRIORITY ENABLED TRIGGER TARGET_ROLE
           escalation rules reset [PRIORITY|all]
@@ -227,6 +230,7 @@ module Helpdesk
       show_watchers(ticket, visibility)
       show_attachments(ticket, visibility)
       show_custom_fields(ticket, visibility)
+      show_escalation_history(ticket)
       activity = activity_entries_for_ticket(ticket.id)
       puts "Activity:"
       if activity.empty?
@@ -1605,10 +1609,12 @@ module Helpdesk
       case action
       when nil
         escalations
+      when "history"
+        show_escalation_history(args.drop(1))
       when "rules"
         manage_escalation_rules(args.drop(1))
       else
-        puts "Usage: escalation | escalation rules show | escalation rules set PRIORITY ENABLED TRIGGER TARGET_ROLE | escalation rules reset [PRIORITY|all]"
+        puts "Usage: escalation | escalation history [--last N] [--ticket ID] | escalation rules show | escalation rules set PRIORITY ENABLED TRIGGER TARGET_ROLE | escalation rules reset [PRIORITY|all]"
       end
     end
 
@@ -1666,11 +1672,78 @@ module Helpdesk
       end
     end
 
+    def escalate_ticket(args)
+      return unless require_permission!(:ticket_write)
+
+      ticket = @store.find(required_id(args))
+      return puts "Ticket not found." unless ticket
+
+      note = args.drop(1).join(" ").strip
+      note = "manual escalation" if note.empty?
+      status = ticket.escalation_needed? ? ticket.escalation_status : "manual"
+      trigger = ticket.escalation_trigger || "manual"
+      target_role = ticket.escalation_target_role || "admin"
+      log_action(
+        "escalation.record",
+        "ticket ##{ticket.id}",
+        status: status,
+        trigger: trigger,
+        target_role: target_role,
+        note: note
+      )
+      puts "Recorded escalation history for ticket ##{ticket.id}."
+    end
+
+    def show_escalation_history(args_or_ticket)
+      options =
+        if args_or_ticket.is_a?(Ticket)
+          { ticket: args_or_ticket.id, last: 5 }
+        else
+          parse_activity_options(Array(args_or_ticket))
+        end
+
+      entries = escalation_history_entries(options[:ticket])
+      entries = entries.last(options[:last]) if options[:last]
+      puts "Escalation history:"
+      if entries.empty?
+        puts "  none"
+        return
+      end
+
+      entries.each { |entry| puts "  #{format_escalation_history_entry(entry)}" }
+    end
+
     def show_sla_rules
       rules = @sla_rules.all
       rules.each do |priority, rule|
         puts "#{priority}: warning #{rule["warning_days"]} days, breach #{rule["breach_days"]} days"
       end
+    end
+
+    def escalation_history_entries(ticket_id = nil)
+      entries = @audit_log.all.select { |entry| entry["action"] == "escalation.record" }
+      entries = entries.select { |entry| activity_entry_for_ticket?(entry, ticket_id) } if ticket_id
+      entries
+    end
+
+    def format_escalation_history_entry(entry)
+      subject = entry["subject"].to_s
+      actor = entry["actor"].to_s
+      created_at = entry["created_at"].to_s
+      details = entry["details"] || {}
+      status = details["status"].to_s
+      trigger = details["trigger"].to_s
+      target_role = details["target_role"].to_s
+      note = details["note"].to_s
+
+      parts = []
+      parts << status unless status.empty?
+      parts << "trigger #{trigger}" unless trigger.empty?
+      parts << "target #{target_role}" unless target_role.empty?
+      parts << "note: #{note}" unless note.empty?
+      suffix = parts.empty? ? "" : " (#{parts.join(", ")})"
+
+      "#{created_at} #{actor} escalated #{subject}#{suffix}"
     end
 
     def sla_warnings
@@ -1945,6 +2018,7 @@ module Helpdesk
         action.start_with?("reminder.") ||
         action.start_with?("notification.") ||
         action.start_with?("user.") ||
+        action.start_with?("escalation.") ||
         action == "tickets.import"
     end
 
@@ -2016,6 +2090,12 @@ module Helpdesk
           "switched to #{subject}"
         when "user.role"
           "changed role for #{subject}"
+        when "escalation.record"
+          "escalated #{subject}"
+        when "escalation.rules_set"
+          "updated escalation rules for #{subject}"
+        when "escalation.rules_reset"
+          "reset escalation rules for #{subject}"
         when "user.notification_preferences"
           "updated notification preferences for #{subject}"
         when "user.notification_suppression_rules"
