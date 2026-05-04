@@ -31,6 +31,8 @@ module Helpdesk
         when "tag" then manage_tags(args)
         when "search" then search(args)
         when "overdue" then overdue
+        when "remind" then remind(args)
+        when "reminders" then reminders
         when "stats" then stats
         when "exit", "quit" then break
         else
@@ -51,6 +53,9 @@ module Helpdesk
           help
           list [--status STATUS] [--priority PRIORITY] [--tag TAG] [--sort created_at|priority] [--overdue]
           overdue
+          reminders
+          remind set ID TIMESTAMP
+          remind clear ID
           show ID
           new
           edit ID
@@ -91,6 +96,8 @@ module Helpdesk
       puts "Priority: #{ticket.priority}"
       puts "Due: #{ticket.due_at || 'none'}"
       puts "Overdue: #{ticket.overdue? ? 'yes' : 'no'}"
+      puts "Reminder: #{ticket.reminder_at || 'none'}"
+      puts "Reminder due: #{ticket.reminder_due? ? 'yes' : 'no'}"
       puts "Tags: #{ticket.tags.join(", ")}"
       puts "Created: #{ticket.created_at}"
       puts "Updated: #{ticket.updated_at}"
@@ -112,6 +119,7 @@ module Helpdesk
       status = prompt("Status", "open")
       priority = prompt("Priority", "medium")
       due_at = prompt("Due date (YYYY-MM-DD)", "")
+      reminder_at = prompt("Reminder time (YYYY-MM-DD HH:MM, optional)", "")
       tags = prompt("Tags (comma separated)", "").split(",").map(&:strip).reject(&:empty?)
       ticket = @store.create(
         title: title,
@@ -119,6 +127,7 @@ module Helpdesk
         status: status,
         priority: priority,
         due_at: due_at,
+        reminder_at: reminder_at,
         tags: tags
       )
       puts "Created ticket ##{ticket.id}."
@@ -137,6 +146,7 @@ module Helpdesk
       attrs[:status] = prompt("Status", ticket.status)
       attrs[:priority] = prompt("Priority", ticket.priority)
       attrs[:due_at] = prompt("Due date (YYYY-MM-DD)", ticket.due_at || "")
+      attrs[:reminder_at] = prompt("Reminder time (YYYY-MM-DD HH:MM, optional)", ticket.reminder_at || "")
       attrs[:tags] = prompt("Tags (comma separated)", ticket.tags.join(", ")).split(",").map(&:strip).reject(&:empty?)
       @store.update(id, attrs)
       puts "Updated ticket ##{id}."
@@ -236,6 +246,7 @@ module Helpdesk
       puts "Resolved: #{counts.fetch("resolved", 0)}"
       puts "Closed: #{counts.fetch("closed", 0)}"
       puts "Total comments: #{tickets.sum { |ticket| ticket.comments.count }}"
+      puts "Due reminders: #{tickets.count(&:reminder_due?)}"
     end
 
     def prompt(label, default = nil)
@@ -300,6 +311,42 @@ module Helpdesk
       end
 
       tickets.each { |ticket| puts format_ticket_row(ticket) }
+    end
+
+    def reminders
+      tickets = @store.all.select(&:reminder_due?)
+      if tickets.empty?
+        puts "No due reminders."
+        return
+      end
+
+      tickets.each do |ticket|
+        puts "##{ticket.id} #{ticket.title} [reminder #{ticket.reminder_at}]"
+      end
+    end
+
+    def remind(args)
+      action = args[0]
+      id = args[1]
+      ticket = @store.find(id)
+      return puts "Ticket not found." unless ticket
+
+      case action
+      when "set"
+        timestamp = args.drop(2).join(" ")
+        timestamp = prompt("Reminder time (YYYY-MM-DD HH:MM)") if timestamp.strip.empty?
+        ticket.update(reminder_at: timestamp)
+        @store.save_ticket(ticket)
+        puts "Reminder set for ticket ##{id}."
+      when "clear"
+        ticket.update(reminder_at: nil)
+        @store.save_ticket(ticket)
+        puts "Reminder cleared for ticket ##{id}."
+      else
+        puts "Usage: remind set ID TIMESTAMP | remind clear ID"
+      end
+    rescue ArgumentError => e
+      puts e.message
     end
 
     def required_id(args)
