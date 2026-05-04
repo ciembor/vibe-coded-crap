@@ -3,6 +3,7 @@ require "time"
 require "csv"
 require "json"
 require "fileutils"
+require "helpdesk/audit_log"
 require "helpdesk/store"
 require "helpdesk/user_store"
 
@@ -10,6 +11,7 @@ module Helpdesk
   class CLI
     def initialize(store: Store.new)
       @store = store
+      @audit_log = AuditLog.new
       @users = UserStore.new
       seed_default_user
       @current_user = @users.all.first
@@ -48,6 +50,7 @@ module Helpdesk
         when "users" then list_users
         when "user" then manage_users(args)
         when "whoami" then whoami
+        when "audit" then audit(args)
         when "exit", "quit" then break
         else
           puts "Unknown command: #{command}. Type 'help'."
@@ -93,6 +96,7 @@ module Helpdesk
           user switch ID
           user role ID ROLE
           whoami
+          audit [--last N]
           exit
       HELP
     end
@@ -162,6 +166,7 @@ module Helpdesk
         reminder_repeat: reminder_repeat,
         tags: tags
       )
+      log_action("ticket.create", "ticket ##{ticket.id}", title: ticket.title, status: ticket.status, priority: ticket.priority)
       puts "Created ticket ##{ticket.id}."
     rescue ArgumentError => e
       puts e.message
@@ -184,6 +189,7 @@ module Helpdesk
       attrs[:reminder_repeat] = prompt("Reminder repeat (daily, weekly, monthly, optional)", ticket.reminder_repeat || "")
       attrs[:tags] = prompt("Tags (comma separated)", ticket.tags.join(", ")).split(",").map(&:strip).reject(&:empty?)
       @store.update(id, attrs)
+      log_action("ticket.update", "ticket ##{id}", title: attrs[:title], status: attrs[:status], priority: attrs[:priority])
       puts "Updated ticket ##{id}."
     rescue ArgumentError => e
       puts e.message
@@ -194,6 +200,7 @@ module Helpdesk
 
       id = required_id(args)
       if @store.delete(id)
+        log_action("ticket.delete", "ticket ##{id}")
         puts "Deleted ticket ##{id}."
       else
         puts "Ticket not found."
@@ -213,6 +220,7 @@ module Helpdesk
       if closed_ids.empty?
         puts "No matching tickets found."
       else
+        closed_ids.each { |ticket_id| log_action("ticket.close", "ticket ##{ticket_id}") }
         puts "Closed tickets: #{closed_ids.map { |id| "##{id}" }.join(", ")}"
       end
     end
@@ -224,6 +232,7 @@ module Helpdesk
       status = args[1]
       ticket = @store.update(id, status: status)
       if ticket
+        log_action("ticket.status", "ticket ##{id}", status: ticket.status)
         puts "Updated ticket ##{id} to #{ticket.status}."
       else
         puts "Ticket not found."
@@ -243,6 +252,7 @@ module Helpdesk
       body = prompt("Comment") if body.strip.empty?
       ticket.add_comment(body: body, author: prompt("Author", current_user_name))
       @store.save_ticket(ticket)
+      log_action("ticket.comment", "ticket ##{id}", author: current_user_name)
       puts "Added comment to ticket ##{id}."
     end
 
@@ -263,6 +273,7 @@ module Helpdesk
         if touched_ids.empty?
           puts "No matching tickets found."
         else
+          touched_ids.each { |ticket_id| log_action("ticket.tag.#{action}", "ticket ##{ticket_id}", tag: tag) }
           verb = action == "add" ? "Added" : "Removed"
           puts "#{verb} tag for tickets: #{touched_ids.map { |id| "##{id}" }.join(", ")}"
         end
@@ -404,6 +415,7 @@ module Helpdesk
       when "json"
         path = args[1] || prompt("JSON path", "data/tickets-export.json")
         count = @store.import_json(path)
+        log_action("tickets.import", "tickets", source: path, count: count)
         puts "Imported #{count} tickets from #{path}."
       else
         puts "Usage: import json [PATH]"
@@ -436,11 +448,13 @@ module Helpdesk
         role = prompt("Role (admin, agent, viewer)", "agent")
         user = @users.create(name: name, email: email, role: role)
         @current_user ||= user
+        log_action("user.create", "user ##{user.id}", name: user.name, role: user.role_label)
         puts "Created user ##{user.id}."
       when "switch"
         user = @users.find(required_id(args.drop(1)))
         return puts "User not found." unless user
 
+        log_action("user.switch", "user ##{user.id}", name: user.name, role: user.role_label)
         @current_user = user
         puts "Switched to #{user.display_name}."
       when "role"
@@ -452,6 +466,7 @@ module Helpdesk
         role = args[2]
         role = prompt("Role (admin, agent, viewer)", user.role_label) if role.to_s.strip.empty?
         user = @users.update(user.id, role: role)
+        log_action("user.role", "user ##{user.id}", name: user.name, role: user.role_label)
         puts "Updated role for #{user.display_name} to #{user.role_label}."
       else
         puts "Usage: user add | user switch ID | user role ID ROLE"
@@ -465,6 +480,19 @@ module Helpdesk
         puts "Current user: ##{@current_user.id} #{@current_user.display_name} (role: #{@current_user.role_label})"
       else
         puts "No current user."
+      end
+    end
+
+    def audit(args)
+      entries = @audit_log.all
+      entries = entries.last(limit_for_audit(args)) if args[0] == "--last"
+      if entries.empty?
+        puts "No audit events."
+        return
+      end
+
+      entries.each do |entry|
+        puts "##{entry["id"]} #{entry["created_at"]} #{entry["actor"]} #{entry["action"]} #{entry["subject"]}"
       end
     end
 
@@ -547,6 +575,7 @@ module Helpdesk
 
         ticket.advance_reminder!
         @store.save_ticket(ticket)
+        log_action("reminder.advance", "ticket ##{ticket.id}", reminder_at: ticket.reminder_at)
       end
     end
 
@@ -564,22 +593,26 @@ module Helpdesk
         timestamp = prompt("Reminder time (YYYY-MM-DD HH:MM)") if timestamp.strip.empty?
         ticket.update(reminder_at: timestamp)
         @store.save_ticket(ticket)
+        log_action("reminder.set", "ticket ##{id}", reminder_at: ticket.reminder_at)
         puts "Reminder set for ticket ##{id}."
       when "clear"
         ticket.update(reminder_at: nil)
         @store.save_ticket(ticket)
+        log_action("reminder.clear", "ticket ##{id}")
         puts "Reminder cleared for ticket ##{id}."
       when "repeat"
         repeat = args[2]
         if repeat == "clear"
           ticket.update(reminder_repeat: nil)
           @store.save_ticket(ticket)
+          log_action("reminder.repeat_clear", "ticket ##{id}")
           puts "Reminder repeat cleared for ticket ##{id}."
         else
           repeat = args.drop(2).join(" ")
           repeat = prompt("Reminder repeat (daily, weekly, monthly)") if repeat.strip.empty?
           ticket.update(reminder_repeat: repeat)
           @store.save_ticket(ticket)
+          log_action("reminder.repeat_set", "ticket ##{id}", reminder_repeat: ticket.reminder_repeat)
           puts "Reminder repeat set for ticket ##{id}."
         end
       else
@@ -604,6 +637,17 @@ module Helpdesk
       return unless @users.all.empty?
 
       @users.create(name: "agent", email: "", role: "agent")
+    end
+
+    def log_action(action, subject, details = {})
+      actor = @current_user ? @current_user.display_name : "system"
+      @audit_log.append(action: action, actor: actor, subject: subject, details: details)
+    end
+
+    def limit_for_audit(args)
+      return 10 unless args[0] == "--last"
+
+      args[1].to_i
     end
 
     def require_permission!(kind)
