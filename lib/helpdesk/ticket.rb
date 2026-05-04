@@ -6,7 +6,7 @@ module Helpdesk
     STATUSES = %w[open in_progress waiting resolved closed].freeze
     PRIORITIES = %w[low medium high urgent].freeze
 
-    attr_accessor :id, :title, :description, :status, :priority, :tags, :comments, :internal_notes, :watchers, :attachments, :pinned, :pinned_at, :created_at, :updated_at, :closed_at, :due_at, :reminder_at, :reminder_repeat
+    attr_accessor :id, :title, :description, :status, :priority, :tags, :comments, :internal_notes, :watchers, :attachments, :pinned, :pinned_at, :archived, :archived_at, :created_at, :updated_at, :closed_at, :due_at, :reminder_at, :reminder_repeat
 
     def self.from_h(hash)
       ticket = new(
@@ -22,6 +22,8 @@ module Helpdesk
         attachments: hash["attachments"] || [],
         pinned: hash["pinned"],
         pinned_at: hash["pinned_at"],
+        archived: hash["archived"],
+        archived_at: hash["archived_at"],
         created_at: hash["created_at"],
         updated_at: hash["updated_at"],
         closed_at: hash["closed_at"],
@@ -33,7 +35,7 @@ module Helpdesk
       ticket
     end
 
-    def initialize(id: nil, title: "", description: "", status: "open", priority: "medium", tags: [], comments: [], internal_notes: [], watchers: [], attachments: [], pinned: false, pinned_at: nil, created_at: nil, updated_at: nil, closed_at: nil, due_at: nil, reminder_at: nil, reminder_repeat: nil)
+    def initialize(id: nil, title: "", description: "", status: "open", priority: "medium", tags: [], comments: [], internal_notes: [], watchers: [], attachments: [], pinned: false, pinned_at: nil, archived: false, archived_at: nil, created_at: nil, updated_at: nil, closed_at: nil, due_at: nil, reminder_at: nil, reminder_repeat: nil)
       @id = id
       @title = title
       @description = description
@@ -46,6 +48,8 @@ module Helpdesk
       @attachments = attachments.dup
       @pinned = pinned
       @pinned_at = pinned_at
+      @archived = archived
+      @archived_at = archived_at
       @created_at = created_at
       @updated_at = updated_at
       @closed_at = closed_at
@@ -91,6 +95,8 @@ module Helpdesk
       end
       self.pinned = normalize_pinned(pinned)
       self.pinned_at = pinned? ? (pinned_at || Time.now.utc.iso8601) : nil
+      self.archived = normalize_archived(archived)
+      self.archived_at = archived? ? (archived_at || Time.now.utc.iso8601) : nil
       self.created_at ||= Time.now.utc.iso8601
       self.updated_at ||= created_at
       self.closed_at = nil unless closed?
@@ -120,6 +126,10 @@ module Helpdesk
       if attrs.key?(:pinned)
         self.pinned = !!attrs[:pinned]
         self.pinned_at = pinned? ? (attrs.fetch(:pinned_at, pinned_at) || Time.now.utc.iso8601) : nil
+      end
+      if attrs.key?(:archived)
+        self.archived = !!attrs[:archived]
+        self.archived_at = archived? ? (attrs.fetch(:archived_at, archived_at) || Time.now.utc.iso8601) : nil
       end
       self.updated_at = Time.now.utc.iso8601
       self.closed_at = Time.now.utc.iso8601 if closed?
@@ -200,6 +210,20 @@ module Helpdesk
       self
     end
 
+    def archive!
+      self.archived = true
+      self.archived_at = Time.now.utc.iso8601
+      self.updated_at = Time.now.utc.iso8601
+      self
+    end
+
+    def unarchive!
+      self.archived = false
+      self.archived_at = nil
+      self.updated_at = Time.now.utc.iso8601
+      self
+    end
+
     def remove_attachment(attachment_id)
       attachment_id = attachment_id.to_i
       original_count = attachments.count
@@ -222,6 +246,10 @@ module Helpdesk
 
     def pinned?
       !!pinned
+    end
+
+    def archived?
+      !!archived
     end
 
     def due_date
@@ -288,6 +316,8 @@ module Helpdesk
         "attachments" => attachments,
         "pinned" => pinned?,
         "pinned_at" => pinned_at,
+        "archived" => archived?,
+        "archived_at" => archived_at,
         "created_at" => created_at,
         "updated_at" => updated_at,
         "closed_at" => closed_at,
@@ -346,6 +376,17 @@ module Helpdesk
     end
 
     def normalize_pinned(value)
+      case value
+      when true, false
+        value
+      when nil
+        false
+      else
+        %w[true yes on 1].include?(value.to_s.strip.downcase)
+      end
+    end
+
+    def normalize_archived(value)
       case value
       when true, false
         value
