@@ -15,6 +15,9 @@ require "helpdesk/webhook_store"
 
 module Helpdesk
   class CLI
+    API_RATE_LIMIT = 5
+    API_RATE_WINDOW_SECONDS = 60
+
     def initialize(store: Store.new)
       @store = store
       @audit_log = AuditLog.new
@@ -25,6 +28,8 @@ module Helpdesk
       @users = UserStore.new
       @api_tokens = ApiTokenStore.new
       @webhooks = WebhookStore.new
+      @api_rate_limit = API_RATE_LIMIT
+      @api_rate_window_seconds = API_RATE_WINDOW_SECONDS
       @escalation_rules.reload_ticket_rules!
       @sla_rules.reload_ticket_rules!
       seed_default_user
@@ -1766,9 +1771,18 @@ module Helpdesk
         return
       end
 
+      rate = @api_tokens.consume!(raw_token, limit: @api_rate_limit, window_seconds: @api_rate_window_seconds)
+      if rate.nil?
+        puts api_json_response(401, error: "Invalid API token.")
+        return
+      end
+      unless rate[:allowed]
+        puts api_json_response(429, {}, "API rate limit exceeded.", rate_limit_remaining: rate[:remaining], rate_limit_reset_at: rate[:reset_at])
+        return
+      end
+
       previous_user = @current_user
       @current_user = @users.find(auth_token["user_id"]) || previous_user
-      @api_tokens.touch!(raw_token)
 
       payload = parse_api_body(body)
       response =
@@ -1851,7 +1865,7 @@ module Helpdesk
 
         tokens.each do |token|
           user = @users.find(token["user_id"])
-          puts "##{token["id"]} #{token["name"]} user=#{user ? user.display_name : "user ##{token["user_id"]}"} enabled=#{token["enabled"]} last_used=#{token["last_used_at"] || 'never'}"
+          puts "##{token["id"]} #{token["name"]} user=#{user ? user.display_name : "user ##{token["user_id"]}"} enabled=#{token["enabled"]} last_used=#{token["last_used_at"] || 'never'} requests=#{token["request_count"].to_i} window_started=#{token["window_started_at"] || 'never'}"
         end
       when "create"
         return unless require_permission!(:admin)
@@ -1896,10 +1910,13 @@ module Helpdesk
       end
     end
 
-    def api_json_response(status, data = {}, error = nil)
+    def api_json_response(status, data = {}, error = nil, meta = {})
       payload = { status: status }
       payload["error"] = error if error
       payload["data"] = data unless error
+      meta.each do |key, value|
+        payload[key.to_s] = value
+      end
       JSON.pretty_generate(payload)
     end
 
