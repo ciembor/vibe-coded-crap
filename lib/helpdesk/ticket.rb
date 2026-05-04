@@ -6,7 +6,7 @@ module Helpdesk
     STATUSES = %w[open in_progress waiting resolved closed].freeze
     PRIORITIES = %w[low medium high urgent].freeze
 
-    attr_accessor :id, :title, :description, :status, :priority, :tags, :comments, :internal_notes, :created_at, :updated_at, :closed_at, :due_at, :reminder_at, :reminder_repeat
+    attr_accessor :id, :title, :description, :status, :priority, :tags, :comments, :internal_notes, :watchers, :created_at, :updated_at, :closed_at, :due_at, :reminder_at, :reminder_repeat
 
     def self.from_h(hash)
       ticket = new(
@@ -18,6 +18,7 @@ module Helpdesk
         tags: hash["tags"] || [],
         comments: hash["comments"] || [],
         internal_notes: hash["internal_notes"] || [],
+        watchers: hash["watchers"] || [],
         created_at: hash["created_at"],
         updated_at: hash["updated_at"],
         closed_at: hash["closed_at"],
@@ -29,7 +30,7 @@ module Helpdesk
       ticket
     end
 
-    def initialize(id: nil, title: "", description: "", status: "open", priority: "medium", tags: [], comments: [], internal_notes: [], created_at: nil, updated_at: nil, closed_at: nil, due_at: nil, reminder_at: nil, reminder_repeat: nil)
+    def initialize(id: nil, title: "", description: "", status: "open", priority: "medium", tags: [], comments: [], internal_notes: [], watchers: [], created_at: nil, updated_at: nil, closed_at: nil, due_at: nil, reminder_at: nil, reminder_repeat: nil)
       @id = id
       @title = title
       @description = description
@@ -38,6 +39,7 @@ module Helpdesk
       @tags = tags.dup
       @comments = comments.dup
       @internal_notes = internal_notes.dup
+      @watchers = watchers.dup
       @created_at = created_at
       @updated_at = updated_at
       @closed_at = closed_at
@@ -69,6 +71,7 @@ module Helpdesk
           "created_at" => note["created_at"] || note[:created_at] || Time.now.utc.iso8601
         }
       end
+      self.watchers = Array(watchers).map { |watcher| watcher.to_i }.reject(&:zero?).uniq.sort
       self.created_at ||= Time.now.utc.iso8601
       self.updated_at ||= created_at
       self.closed_at = nil unless closed?
@@ -107,6 +110,20 @@ module Helpdesk
         "author" => author,
         "created_at" => Time.now.utc.iso8601
       }
+      self.updated_at = Time.now.utc.iso8601
+    end
+
+    def add_watcher(user_id)
+      user_id = user_id.to_i
+      return if user_id.zero?
+
+      self.watchers = (watchers + [user_id]).uniq.sort
+      self.updated_at = Time.now.utc.iso8601
+    end
+
+    def remove_watcher(user_id)
+      user_id = user_id.to_i
+      self.watchers = watchers.reject { |watcher_id| watcher_id.to_i == user_id }
       self.updated_at = Time.now.utc.iso8601
     end
 
@@ -188,6 +205,7 @@ module Helpdesk
         "tags" => tags,
         "comments" => comments,
         "internal_notes" => internal_notes,
+        "watchers" => watchers,
         "created_at" => created_at,
         "updated_at" => updated_at,
         "closed_at" => closed_at,

@@ -39,6 +39,7 @@ module Helpdesk
         when "status" then change_status(args)
         when "comment" then add_comment(args)
         when "note" then add_note(args)
+        when "watch" then manage_watchers(args)
         when "tag" then manage_tags(args)
         when "search" then search(args)
         when "overdue" then overdue
@@ -85,6 +86,9 @@ module Helpdesk
           status ID STATUS
           comment ID TEXT
           note ID TEXT
+          watch add ID USER_ID
+          watch remove ID USER_ID
+          watch list ID
           tag add ID [ID ...] TAG
           tag remove ID [ID ...] TAG
           search QUERY
@@ -151,6 +155,16 @@ module Helpdesk
       else
         ticket.internal_notes.each do |note|
           puts "  [#{note["id"]}] #{note["author"]} @ #{note["created_at"]}: #{note["body"]}"
+        end
+      end
+      puts "Watchers:"
+      if ticket.watchers.empty?
+        puts "  none"
+      else
+        ticket.watchers.each do |watcher_id|
+          user = @users.find(watcher_id)
+          label = user ? user.display_name : "user ##{watcher_id}"
+          puts "  - #{label}"
         end
       end
     end
@@ -279,6 +293,55 @@ module Helpdesk
       @store.save_ticket(ticket)
       log_action("ticket.note", "ticket ##{id}", author: current_user_name)
       puts "Added internal note to ticket ##{id}."
+    end
+
+    def manage_watchers(args)
+      return unless require_permission!(:ticket_write)
+
+      action = args[0]
+      case action
+      when "add"
+        id = required_id(args.drop(1))
+        user = @users.find(required_id(args.drop(2)))
+        return puts "User not found." unless user
+
+        ticket = @store.find(id)
+        return puts "Ticket not found." unless ticket
+
+        ticket.add_watcher(user.id)
+        @store.save_ticket(ticket)
+        log_action("ticket.watch_add", "ticket ##{id}", watcher: user.display_name)
+        puts "Added watcher #{user.display_name} to ticket ##{id}."
+      when "remove"
+        id = required_id(args.drop(1))
+        user = @users.find(required_id(args.drop(2)))
+        return puts "User not found." unless user
+
+        ticket = @store.find(id)
+        return puts "Ticket not found." unless ticket
+
+        ticket.remove_watcher(user.id)
+        @store.save_ticket(ticket)
+        log_action("ticket.watch_remove", "ticket ##{id}", watcher: user.display_name)
+        puts "Removed watcher #{user.display_name} from ticket ##{id}."
+      when "list"
+        id = required_id(args.drop(1))
+        ticket = @store.find(id)
+        return puts "Ticket not found." unless ticket
+
+        if ticket.watchers.empty?
+          puts "No watchers."
+        else
+          ticket.watchers.each do |watcher_id|
+            user = @users.find(watcher_id)
+            puts user ? "#{user.display_name} (##{user.id})" : "user ##{watcher_id}"
+          end
+        end
+      else
+        puts "Usage: watch add ID USER_ID | watch remove ID USER_ID | watch list ID"
+      end
+    rescue ArgumentError => e
+      puts e.message
     end
 
     def manage_tags(args)
