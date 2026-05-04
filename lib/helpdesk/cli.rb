@@ -203,6 +203,9 @@ module Helpdesk
           workflow transitions show TYPE
           workflow transitions set TYPE FROM STATUS [STATUS ...]
           workflow transitions reset [TYPE|all]
+          workflow permissions show TYPE
+          workflow permissions set TYPE FROM TO ROLE [ROLE ...]
+          workflow permissions reset [TYPE|all]
           duplicates [--ticket ID]
           dashboard
           stats
@@ -440,7 +443,7 @@ module Helpdesk
       attrs[:reminder_at] = prompt("Reminder time (YYYY-MM-DD HH:MM, optional)", ticket.reminder_at || "")
       attrs[:reminder_repeat] = prompt("Reminder repeat (daily, weekly, monthly, optional)", ticket.reminder_repeat || "")
       attrs[:tags] = prompt("Tags (comma separated)", ticket.tags.join(", ")).split(",").map(&:strip).reject(&:empty?)
-      @store.update(id, attrs)
+      @store.update(id, attrs, actor_role: @current_user&.role_label)
       log_action("ticket.update", "ticket ##{id}", title: attrs[:title], status: attrs[:status], priority: attrs[:priority])
       puts "Updated ticket ##{id}."
     rescue ArgumentError => e
@@ -472,7 +475,7 @@ module Helpdesk
         ticket = @store.find(id)
         ticket && !@store.closeable_ticket?(ticket)
       end
-      closed_ids = @store.bulk_close(ids)
+      closed_ids = @store.bulk_close(ids, actor_role: @current_user&.role_label)
       if closed_ids.empty? && blocked_ids.empty?
         puts "No matching tickets found."
       else
@@ -703,7 +706,7 @@ module Helpdesk
 
       id = required_id(args)
       status = args[1]
-      ticket = @store.update(id, status: status)
+      ticket = @store.update(id, { status: status }, actor_role: @current_user&.role_label)
       if ticket
         log_action("ticket.status", "ticket ##{id}", status: ticket.status)
         puts "Updated ticket ##{id} to #{ticket.status}."
@@ -1543,8 +1546,10 @@ module Helpdesk
         puts target == "all" ? "Reset all workflows." : "Reset workflow #{target}."
       when "transitions"
         manage_workflow_transitions(args.drop(1))
+      when "permissions"
+        manage_workflow_permissions(args.drop(1))
       else
-        puts "Usage: workflow show | workflow set TYPE STATUS [STATUS ...] | workflow reset [TYPE|all] | workflow transitions show TYPE | workflow transitions set TYPE FROM STATUS [STATUS ...] | workflow transitions reset [TYPE|all]"
+        puts "Usage: workflow show | workflow set TYPE STATUS [STATUS ...] | workflow reset [TYPE|all] | workflow transitions show TYPE | workflow transitions set TYPE FROM STATUS [STATUS ...] | workflow transitions reset [TYPE|all] | workflow permissions show TYPE | workflow permissions set TYPE FROM TO ROLE [ROLE ...] | workflow permissions reset [TYPE|all]"
       end
     rescue ArgumentError => e
       puts e.message
@@ -1614,8 +1619,10 @@ module Helpdesk
 
       workflows.each do |workflow|
         transitions = format_workflow_transitions(workflow["transitions"] || {})
+        permissions = format_workflow_permissions(workflow["permissions"] || {})
         puts "#{workflow["ticket_type"]}: #{workflow["statuses"].join(", ")} (initial: #{workflow["initial_status"]})"
         puts "  transitions: #{transitions}"
+        puts "  permissions: #{permissions}"
       end
     end
 
@@ -1669,6 +1676,57 @@ module Helpdesk
       puts e.message
     end
 
+    def manage_workflow_permissions(args)
+      action = args[0]
+      case action
+      when "show"
+        ticket_type = args[1].to_s.strip
+        if ticket_type.empty?
+          puts "Usage: workflow permissions show TYPE"
+          return
+        end
+
+        workflow = @workflows.find(ticket_type)
+        return puts "Workflow not found." unless workflow
+
+        puts "#{workflow["ticket_type"]}:"
+        puts "  #{format_workflow_permissions(workflow["permissions"] || {})}"
+      when "set"
+        return unless require_permission!(:admin)
+
+        ticket_type = args[1].to_s.strip
+        from_status = args[2].to_s.strip
+        to_status = args[3].to_s.strip
+        roles = args.drop(4)
+        if ticket_type.empty? || from_status.empty? || to_status.empty? || roles.empty?
+          puts "Usage: workflow permissions set TYPE FROM TO ROLE [ROLE ...]"
+          return
+        end
+
+        workflow = @workflows.set_transition_permission(ticket_type, from_status, to_status, roles)
+        return puts "Workflow not found." unless workflow
+
+        reload_ticket_workflows!
+        log_action("workflow.permissions_set", "workflow #{ticket_type}", from: from_status, to: to_status, roles: roles)
+        puts "Updated transition permissions for workflow #{ticket_type}."
+      when "reset"
+        return unless require_permission!(:admin)
+
+        target = args[1].to_s.strip
+        target = "all" if target.empty?
+        result = @workflows.reset_transition_permissions(target)
+        return puts "Workflow not found." if result.nil? && target != "all"
+
+        reload_ticket_workflows!
+        log_action("workflow.permissions_reset", "workflow #{target}", workflow: target)
+        puts target == "all" ? "Reset transition permissions for all workflows." : "Reset transition permissions for #{target}."
+      else
+        puts "Usage: workflow permissions show TYPE | workflow permissions set TYPE FROM TO ROLE [ROLE ...] | workflow permissions reset [TYPE|all]"
+      end
+    rescue ArgumentError => e
+      puts e.message
+    end
+
     def reload_ticket_workflows!
       Ticket.workflows = @workflows.to_workflow_hash
     end
@@ -1676,6 +1734,11 @@ module Helpdesk
     def show_workflow_transitions(ticket)
       next_statuses = Ticket.workflow_next_statuses_for(ticket.ticket_type, ticket.status)
       puts "Next statuses: #{next_statuses.empty? ? 'none' : next_statuses.join(', ')}"
+      permissions = next_statuses.map do |next_status|
+        roles = Ticket.workflow_transition_roles_for(ticket.ticket_type, ticket.status, next_status)
+        "#{next_status}=#{roles.join(', ')}"
+      end
+      puts "Transition roles: #{permissions.empty? ? 'none' : permissions.join(' | ')}"
     end
 
     def format_workflow_transitions(transitions)
@@ -1683,6 +1746,17 @@ module Helpdesk
 
       transitions.sort_by { |from_status, _| from_status.to_s }.map do |from_status, next_statuses|
         "#{from_status} -> #{Array(next_statuses).join(', ')}"
+      end.join(" | ")
+    end
+
+    def format_workflow_permissions(permissions)
+      return "none" if permissions.empty?
+
+      permissions.sort_by { |from_status, _| from_status.to_s }.map do |from_status, transitions|
+        inner = transitions.sort_by { |to_status, _| to_status.to_s }.map do |to_status, roles|
+          "#{to_status}: #{Array(roles).join(', ')}"
+        end.join(" | ")
+        "#{from_status} => #{inner}"
       end.join(" | ")
     end
 
@@ -1939,7 +2013,7 @@ module Helpdesk
           return unless require_permission!(:ticket_write)
 
           id = path.split("/").last
-          ticket = @store.update(id, payload.transform_keys(&:to_sym))
+          ticket = @store.update(id, payload.transform_keys(&:to_sym), actor_role: @current_user&.role_label)
           return puts(api_json_response(404, error: "Ticket not found.")) unless ticket
 
           invalidate_api_cache!

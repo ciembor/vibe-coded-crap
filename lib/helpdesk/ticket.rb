@@ -23,6 +23,7 @@ module Helpdesk
       "feature" => { name: "Feature", statuses: STATUSES, initial_status: "open" },
       "incident" => { name: "Incident", statuses: STATUSES, initial_status: "open" }
     }.freeze
+    DEFAULT_TRANSITION_ROLES = %w[admin agent].freeze
 
     class << self
       def sla_rules
@@ -75,6 +76,23 @@ module Helpdesk
 
       def workflow_next_statuses_for(ticket_type, status)
         Array(workflow_transitions_for(ticket_type)[status.to_s])
+      end
+
+      def workflow_transition_permissions_for(ticket_type)
+        workflow_for(ticket_type)["permissions"] || {}
+      end
+
+      def workflow_transition_roles_for(ticket_type, from_status, to_status)
+        workflow_transition_permissions_for(ticket_type)
+          .fetch(from_status.to_s, {})
+          .fetch(to_status.to_s, DEFAULT_TRANSITION_ROLES)
+      end
+
+      def workflow_transition_allowed?(ticket_type, from_status, to_status, role)
+        role = role.to_s.strip
+        return true if role.empty?
+
+        workflow_transition_roles_for(ticket_type, from_status, to_status).include?(role)
       end
 
       private
@@ -152,12 +170,18 @@ module Helpdesk
             statuses: statuses,
             ticket_type: ticket_type
           )
+          permissions = normalize_workflow_permissions(
+            workflow["permissions"] || workflow[:permissions] || default_workflow_permissions(transitions),
+            statuses: statuses,
+            ticket_type: ticket_type
+          )
 
           normalized[ticket_type] = {
             "name" => (workflow["name"] || workflow[:name] || ticket_type.tr("_", " ").capitalize).to_s,
             "statuses" => statuses,
             "initial_status" => initial_status,
-            "transitions" => transitions
+            "transitions" => transitions,
+            "permissions" => permissions
           }
         end
       end
@@ -188,6 +212,37 @@ module Helpdesk
         statuses.each_cons(2).each_with_object({}) do |(from_status, to_status), normalized|
           normalized[from_status] ||= []
           normalized[from_status] << to_status
+        end
+      end
+
+      def default_workflow_permissions(transitions)
+        transitions.each_with_object({}) do |(from_status, next_statuses), normalized|
+          normalized[from_status] = Array(next_statuses).each_with_object({}) do |to_status, per_from|
+            per_from[to_status] = DEFAULT_TRANSITION_ROLES.dup
+          end
+        end
+      end
+
+      def normalize_workflow_permissions(permissions, statuses:, ticket_type:)
+        source = permissions.is_a?(Hash) ? permissions : {}
+        source.each_with_object({}) do |(from_status, next_statuses), normalized|
+          from_status = normalize_workflow_status(from_status)
+          next if from_status.empty?
+          raise ArgumentError, "workflow #{ticket_type} has invalid permission source: #{from_status}" unless statuses.include?(from_status)
+
+          normalized[from_status] = {}
+          Hash(next_statuses).each do |to_status, roles|
+            to_status = normalize_workflow_status(to_status)
+            next if to_status.empty?
+            raise ArgumentError, "workflow #{ticket_type} has invalid permission target: #{to_status}" unless statuses.include?(to_status)
+
+            normalized_roles = Array(roles).map { |role| role.to_s.strip.downcase }.reject(&:empty?).uniq
+            normalized_roles = DEFAULT_TRANSITION_ROLES.dup if normalized_roles.empty?
+            invalid_roles = normalized_roles - %w[admin agent viewer]
+            raise ArgumentError, "workflow #{ticket_type} has invalid permission roles: #{invalid_roles.join(', ')}" if invalid_roles.any?
+
+            normalized[from_status][to_status] = normalized_roles
+          end
         end
       end
 
@@ -618,6 +673,10 @@ module Helpdesk
     def escalation_trigger
       rule = escalation_rule
       rule ? rule[:trigger] : nil
+    end
+
+    def can_transition_to?(to_status, role: nil)
+      self.class.workflow_transition_allowed?(ticket_type, status, to_status, role)
     end
 
     def escalation_triggered?(rule = escalation_rule, _reference_time = Time.now.utc)

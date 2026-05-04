@@ -229,16 +229,24 @@ module Helpdesk
       ticket
     end
 
-    def update(id, attrs)
+    def update(id, attrs, actor_role: nil)
       tickets = load_data
       index = tickets.index { |row| row["id"].to_i == id.to_i }
       return nil unless index
 
       ticket = Ticket.from_h(tickets[index])
-      if attrs.key?(:status) && ticket.send(:normalize_status, attrs[:status]) == "closed"
-        open_dependencies = open_dependencies_for(ticket)
-        unless open_dependencies.empty?
-          raise ArgumentError, "cannot close ticket ##{ticket.id} with open dependencies: #{open_dependencies.map { |dependency| "##{dependency.id}" }.join(", ")}"
+      if attrs.key?(:status)
+        target_type = attrs.fetch(:ticket_type, ticket.ticket_type)
+        target_status = ticket.send(:normalize_status, attrs[:status], ticket_type: target_type)
+        unless ticket.can_transition_to?(target_status, role: actor_role)
+          raise ArgumentError, "transition #{ticket.status} -> #{target_status} is not permitted for #{actor_role || 'system'}"
+        end
+
+        if target_status == "closed"
+          open_dependencies = open_dependencies_for(ticket)
+          unless open_dependencies.empty?
+            raise ArgumentError, "cannot close ticket ##{ticket.id} with open dependencies: #{open_dependencies.map { |dependency| "##{dependency.id}" }.join(", ")}"
+          end
         end
       end
 
@@ -256,7 +264,7 @@ module Helpdesk
       !removed.nil?
     end
 
-    def bulk_close(ids)
+    def bulk_close(ids, actor_role: nil)
       id_list = Array(ids).map(&:to_i).uniq
       return [] if id_list.empty?
 
@@ -269,6 +277,7 @@ module Helpdesk
 
         ticket = Ticket.from_h(row)
         next unless closeable_ticket?(ticket)
+        next unless ticket.can_transition_to?("closed", role: actor_role)
 
         affected_rows << row.dup
         ticket.update(status: "closed")

@@ -27,7 +27,8 @@ module Helpdesk
         "name" => attrs[:name] || attrs["name"] || ticket_type.to_s,
         "statuses" => attrs[:statuses] || attrs["statuses"] || [],
         "initial_status" => attrs[:initial_status] || attrs["initial_status"],
-        "transitions" => attrs[:transitions] || attrs["transitions"]
+        "transitions" => attrs[:transitions] || attrs["transitions"],
+        "permissions" => attrs[:permissions] || attrs["permissions"]
       )
 
       index = rows.index { |row| row["ticket_type"].to_s == workflow["ticket_type"] }
@@ -57,6 +58,10 @@ module Helpdesk
       find(ticket_type).to_h.fetch("transitions", {})
     end
 
+    def permissions_for(ticket_type)
+      find(ticket_type).to_h.fetch("permissions", {})
+    end
+
     def set_transition(ticket_type, from_status, next_statuses)
       rows = load_data
       index = rows.index { |row| row["ticket_type"].to_s == ticket_type.to_s }
@@ -75,7 +80,14 @@ module Helpdesk
       rows = load_data
       if ticket_type.nil? || ticket_type.to_s == "all"
         rows.map! do |row|
-          normalize_workflow(row["ticket_type"], row.merge("transitions" => default_transitions(row["statuses"] || [])))
+          default_transitions = default_transitions(row["statuses"] || [])
+          normalize_workflow(
+            row["ticket_type"],
+            row.merge(
+              "transitions" => default_transitions,
+              "permissions" => default_permissions(default_transitions)
+            )
+          )
         end
         save!(rows)
         return rows
@@ -85,7 +97,51 @@ module Helpdesk
       index = rows.index { |row| row["ticket_type"].to_s == ticket_type }
       return nil unless index
 
-      rows[index] = normalize_workflow(ticket_type, rows[index].merge("transitions" => default_transitions(rows[index]["statuses"] || [])))
+      default_transitions = default_transitions(rows[index]["statuses"] || [])
+      rows[index] = normalize_workflow(
+        ticket_type,
+        rows[index].merge(
+          "transitions" => default_transitions,
+          "permissions" => default_permissions(default_transitions)
+        )
+      )
+      save!(rows)
+      rows[index]
+    end
+
+    def set_transition_permission(ticket_type, from_status, to_status, roles)
+      rows = load_data
+      index = rows.index { |row| row["ticket_type"].to_s == ticket_type.to_s }
+      return nil unless index
+
+      workflow = normalize_workflow(
+        ticket_type,
+        rows[index].merge(
+          "permissions" => (rows[index]["permissions"] || {}).merge(
+            from_status.to_s => (rows[index]["permissions"] || {}).fetch(from_status.to_s, {}).merge(to_status.to_s => roles)
+          )
+        )
+      )
+      rows[index] = workflow
+      save!(rows)
+      workflow
+    end
+
+    def reset_transition_permissions(ticket_type = nil)
+      rows = load_data
+      if ticket_type.nil? || ticket_type.to_s == "all"
+        rows.map! do |row|
+          normalize_workflow(row["ticket_type"], row.merge("permissions" => default_permissions(row["transitions"] || {})))
+        end
+        save!(rows)
+        return rows
+      end
+
+      ticket_type = ticket_type.to_s
+      index = rows.index { |row| row["ticket_type"].to_s == ticket_type }
+      return nil unless index
+
+      rows[index] = normalize_workflow(ticket_type, rows[index].merge("permissions" => default_permissions(rows[index]["transitions"] || {})))
       save!(rows)
       rows[index]
     end
@@ -96,7 +152,8 @@ module Helpdesk
           "name" => row["name"],
           "statuses" => row["statuses"],
           "initial_status" => row["initial_status"],
-          "transitions" => row["transitions"] || {}
+          "transitions" => row["transitions"] || {},
+          "permissions" => row["permissions"] || {}
         }
       end
     end
@@ -117,6 +174,14 @@ module Helpdesk
       default_workflows.values
     end
 
+    def default_permissions(transitions)
+      transitions.each_with_object({}) do |(from_status, next_statuses), normalized|
+        normalized[from_status] = Array(next_statuses).each_with_object({}) do |to_status, per_from|
+          per_from[to_status] = Ticket::DEFAULT_TRANSITION_ROLES.dup
+        end
+      end
+    end
+
     def normalize_workflow(ticket_type, attrs)
       ticket_type = ticket_type.to_s.strip
       raise ArgumentError, "ticket type cannot be empty" if ticket_type.empty?
@@ -128,13 +193,20 @@ module Helpdesk
       raise ArgumentError, "workflow #{ticket_type} must include closed" unless statuses.include?("closed")
       raise ArgumentError, "workflow #{ticket_type} initial status must be in statuses" unless statuses.include?(initial_status)
       transitions = normalize_transitions(attrs["transitions"] || attrs[:transitions] || default_transitions(statuses), statuses, ticket_type)
+      permissions = normalize_permissions(
+        attrs["permissions"] || attrs[:permissions] || default_permissions(transitions),
+        transitions,
+        statuses,
+        ticket_type
+      )
 
       {
         "ticket_type" => ticket_type,
         "name" => (attrs["name"] || attrs[:name] || ticket_type.tr("_", " ").capitalize).to_s.strip,
         "statuses" => statuses,
         "initial_status" => initial_status,
-        "transitions" => transitions
+        "transitions" => transitions,
+        "permissions" => permissions
       }
     end
 
@@ -155,6 +227,32 @@ module Helpdesk
         normalized[from_status] = Array(next_statuses).map { |status| status.to_s.strip }.reject(&:empty?).uniq
         invalid = normalized[from_status] - statuses
         raise ArgumentError, "workflow #{ticket_type} has invalid transition targets: #{invalid.join(', ')}" if invalid.any?
+      end
+    end
+
+    def normalize_permissions(permissions, transitions, statuses, ticket_type)
+      source = permissions.is_a?(Hash) ? permissions : {}
+      normalized = default_permissions(transitions)
+      source.each_with_object(normalized) do |(from_status, transition_roles), acc|
+        from_status = from_status.to_s.strip
+        next if from_status.empty?
+        raise ArgumentError, "workflow #{ticket_type} has invalid permission source: #{from_status}" unless statuses.include?(from_status)
+        valid_targets = Array(transitions[from_status]).map(&:to_s)
+
+        acc[from_status] ||= {}
+        Hash(transition_roles).each do |to_status, roles|
+          to_status = to_status.to_s.strip
+          next if to_status.empty?
+          raise ArgumentError, "workflow #{ticket_type} has invalid permission target: #{to_status}" unless statuses.include?(to_status)
+          raise ArgumentError, "workflow #{ticket_type} has no transition #{from_status} -> #{to_status}" unless valid_targets.include?(to_status)
+
+          normalized_roles = Array(roles).map { |role| role.to_s.strip.downcase }.reject(&:empty?).uniq
+          normalized_roles = Ticket::DEFAULT_TRANSITION_ROLES.dup if normalized_roles.empty?
+          invalid_roles = normalized_roles - %w[admin agent viewer]
+          raise ArgumentError, "workflow #{ticket_type} has invalid permission roles: #{invalid_roles.join(', ')}" if invalid_roles.any?
+
+          acc[from_status][to_status] = normalized_roles
+        end
       end
     end
 
