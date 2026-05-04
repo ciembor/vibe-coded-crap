@@ -14,8 +14,12 @@ module Helpdesk
       save!([]) unless File.exist?(path)
     end
 
-    def all
-      load_data.map { |row| Ticket.from_h(row) }
+    def all(include_deleted: false)
+      load_data.map { |row| Ticket.from_h(row) }.select { |ticket| include_deleted || !ticket.deleted? }
+    end
+
+    def deleted_tickets
+      all(include_deleted: true).select(&:deleted?)
     end
 
     def duplicate_groups
@@ -201,8 +205,8 @@ module Helpdesk
       { ticket: ticket, dependency: dependency }
     end
 
-    def find(id)
-      all.find { |ticket| ticket.id.to_i == id.to_i }
+    def find(id, include_deleted: false)
+      all(include_deleted: include_deleted).find { |ticket| ticket.id.to_i == id.to_i }
     end
 
     def create(attrs)
@@ -235,6 +239,7 @@ module Helpdesk
       return nil unless index
 
       ticket = Ticket.from_h(tickets[index])
+      return nil if ticket.deleted?
       if attrs.key?(:status)
         target_type = attrs.fetch(:ticket_type, ticket.ticket_type)
         target_status = ticket.send(:normalize_status, attrs[:status], ticket_type: target_type)
@@ -259,9 +264,16 @@ module Helpdesk
 
     def delete(id)
       tickets = load_data
-      removed = tickets.reject! { |row| row["id"].to_i == id.to_i }
-      save!(tickets) if removed
-      !removed.nil?
+      index = tickets.index { |row| row["id"].to_i == id.to_i }
+      return false unless index
+
+      ticket = Ticket.from_h(tickets[index])
+      return false if ticket.deleted?
+
+      ticket.delete!
+      tickets[index] = ticket.to_h
+      save!(tickets)
+      true
     end
 
     def bulk_close(ids, actor_role: nil)
@@ -276,6 +288,7 @@ module Helpdesk
         next unless id_list.include?(row["id"].to_i)
 
         ticket = Ticket.from_h(row)
+        next if ticket.deleted?
         next unless closeable_ticket?(ticket)
         next unless ticket.can_transition_to?("closed", role: actor_role)
 
@@ -302,8 +315,9 @@ module Helpdesk
       tickets.each do |row|
         next unless id_list.include?(row["id"].to_i)
 
-        affected_rows << row.dup
         ticket = Ticket.from_h(row)
+        next if ticket.deleted?
+        affected_rows << row.dup
         case action
         when "add"
           ticket.add_tag(tag)

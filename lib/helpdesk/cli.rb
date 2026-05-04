@@ -456,7 +456,7 @@ module Helpdesk
       id = required_id(args)
       if @store.delete(id)
         log_action("ticket.delete", "ticket ##{id}")
-        puts "Deleted ticket ##{id}."
+        puts "Soft-deleted ticket ##{id}."
       else
         puts "Ticket not found."
       end

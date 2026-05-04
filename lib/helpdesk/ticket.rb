@@ -255,7 +255,7 @@ module Helpdesk
       end
     end
 
-    attr_accessor :id, :title, :description, :status, :priority, :tags, :comments, :internal_notes, :watchers, :attachments, :custom_fields, :ticket_type, :merged_into_id, :merged_from_ids, :related_ids, :parent_id, :child_ids, :dependency_ids, :pinned, :pinned_at, :archived, :archived_at, :created_at, :updated_at, :closed_at, :due_at, :reminder_at, :reminder_repeat
+    attr_accessor :id, :title, :description, :status, :priority, :tags, :comments, :internal_notes, :watchers, :attachments, :custom_fields, :ticket_type, :merged_into_id, :merged_from_ids, :related_ids, :parent_id, :child_ids, :dependency_ids, :pinned, :pinned_at, :archived, :archived_at, :deleted, :deleted_at, :created_at, :updated_at, :closed_at, :due_at, :reminder_at, :reminder_repeat
 
     def self.from_h(hash)
       ticket = new(
@@ -281,6 +281,8 @@ module Helpdesk
         pinned_at: hash["pinned_at"],
         archived: hash["archived"],
         archived_at: hash["archived_at"],
+        deleted: hash["deleted"],
+        deleted_at: hash["deleted_at"],
         created_at: hash["created_at"],
         updated_at: hash["updated_at"],
         closed_at: hash["closed_at"],
@@ -292,7 +294,7 @@ module Helpdesk
       ticket
     end
 
-    def initialize(id: nil, title: "", description: "", status: "open", priority: "medium", tags: [], comments: [], internal_notes: [], watchers: [], attachments: [], custom_fields: {}, ticket_type: "general", merged_into_id: nil, merged_from_ids: [], related_ids: [], parent_id: nil, child_ids: [], dependency_ids: [], pinned: false, pinned_at: nil, archived: false, archived_at: nil, created_at: nil, updated_at: nil, closed_at: nil, due_at: nil, reminder_at: nil, reminder_repeat: nil)
+    def initialize(id: nil, title: "", description: "", status: "open", priority: "medium", tags: [], comments: [], internal_notes: [], watchers: [], attachments: [], custom_fields: {}, ticket_type: "general", merged_into_id: nil, merged_from_ids: [], related_ids: [], parent_id: nil, child_ids: [], dependency_ids: [], pinned: false, pinned_at: nil, archived: false, archived_at: nil, deleted: false, deleted_at: nil, created_at: nil, updated_at: nil, closed_at: nil, due_at: nil, reminder_at: nil, reminder_repeat: nil)
       @id = id
       @title = title
       @description = description
@@ -315,6 +317,8 @@ module Helpdesk
       @pinned_at = pinned_at
       @archived = archived
       @archived_at = archived_at
+      @deleted = deleted
+      @deleted_at = deleted_at
       @created_at = created_at
       @updated_at = updated_at
       @closed_at = closed_at
@@ -370,6 +374,8 @@ module Helpdesk
       self.pinned_at = pinned? ? (pinned_at || Time.now.utc.iso8601) : nil
       self.archived = normalize_archived(archived)
       self.archived_at = archived? ? (archived_at || Time.now.utc.iso8601) : nil
+      self.deleted = normalize_deleted(deleted)
+      self.deleted_at = deleted? ? (deleted_at || Time.now.utc.iso8601) : nil
       self.created_at ||= Time.now.utc.iso8601
       self.updated_at ||= created_at
       self.closed_at = nil unless closed?
@@ -415,6 +421,10 @@ module Helpdesk
       if attrs.key?(:archived)
         self.archived = !!attrs[:archived]
         self.archived_at = archived? ? (attrs.fetch(:archived_at, archived_at) || Time.now.utc.iso8601) : nil
+      end
+      if attrs.key?(:deleted)
+        self.deleted = !!attrs[:deleted]
+        self.deleted_at = deleted? ? (attrs.fetch(:deleted_at, deleted_at) || Time.now.utc.iso8601) : nil
       end
       self.updated_at = Time.now.utc.iso8601
       self.closed_at = Time.now.utc.iso8601 if closed?
@@ -525,6 +535,20 @@ module Helpdesk
       self
     end
 
+    def delete!
+      self.deleted = true
+      self.deleted_at = Time.now.utc.iso8601
+      self.updated_at = Time.now.utc.iso8601
+      self
+    end
+
+    def restore_deleted!
+      self.deleted = false
+      self.deleted_at = nil
+      self.updated_at = Time.now.utc.iso8601
+      self
+    end
+
     def remove_attachment(attachment_id)
       attachment_id = attachment_id.to_i
       original_count = attachments.count
@@ -551,6 +575,10 @@ module Helpdesk
 
     def archived?
       !!archived
+    end
+
+    def deleted?
+      !!deleted
     end
 
     def merged?
@@ -753,6 +781,8 @@ module Helpdesk
         "pinned_at" => pinned_at,
         "archived" => archived?,
         "archived_at" => archived_at,
+        "deleted" => deleted?,
+        "deleted_at" => deleted_at,
         "created_at" => created_at,
         "updated_at" => updated_at,
         "closed_at" => closed_at,
@@ -824,6 +854,17 @@ module Helpdesk
     end
 
     def normalize_archived(value)
+      case value
+      when true, false
+        value
+      when nil
+        false
+      else
+        %w[true yes on 1].include?(value.to_s.strip.downcase)
+      end
+    end
+
+    def normalize_deleted(value)
       case value
       when true, false
         value
