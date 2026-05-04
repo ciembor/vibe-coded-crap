@@ -276,6 +276,20 @@ module Helpdesk
       true
     end
 
+    def restore(id)
+      tickets = load_data
+      index = tickets.index { |row| row["id"].to_i == id.to_i }
+      return false unless index
+
+      ticket = Ticket.from_h(tickets[index])
+      return false unless ticket.deleted?
+
+      ticket.restore_deleted!
+      tickets[index] = ticket.to_h
+      save!(tickets)
+      true
+    end
+
     def bulk_close(ids, actor_role: nil)
       id_list = Array(ids).map(&:to_i).uniq
       return [] if id_list.empty?

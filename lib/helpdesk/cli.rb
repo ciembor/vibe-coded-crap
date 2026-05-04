@@ -59,6 +59,7 @@ module Helpdesk
         when "new" then create_ticket(args)
         when "edit" then edit_ticket(args)
         when "delete" then delete_ticket(args)
+        when "restore" then restore_ticket(args)
         when "close" then close_tickets(args)
         when "undo" then undo(args)
         when "merge" then merge_tickets(args)
@@ -122,8 +123,9 @@ module Helpdesk
       puts <<~HELP
         Commands:
           help
-          list [--status STATUS] [--priority PRIORITY] [--tag TAG] [--sort created_at|priority|custom] [--overdue] [--archived|--active]
+          list [--status STATUS] [--priority PRIORITY] [--tag TAG] [--sort created_at|priority|custom] [--overdue] [--archived|--active|--deleted]
           overdue
+          restore ID
           reminders
           remind set ID TIMESTAMP
           remind clear ID
@@ -238,7 +240,8 @@ module Helpdesk
 
     def list(args)
       options = parse_options(args)
-      tickets = filter_tickets(@store.all, options)
+      include_deleted = truthy_option?(options, :deleted)
+      tickets = filter_tickets(@store.all(include_deleted: include_deleted), options)
 
       if tickets.empty?
         puts "No tickets found."
@@ -255,6 +258,7 @@ module Helpdesk
       tickets = tickets.select(&:overdue?) if truthy_option?(options, :overdue)
       tickets = tickets.select(&:archived?) if truthy_option?(options, :archived)
       tickets = tickets.reject(&:archived?) if truthy_option?(options, :active)
+      tickets = tickets.select(&:deleted?) if truthy_option?(options, :deleted)
       sort_tickets(tickets, option_value(options, :sort))
     end
 
@@ -457,6 +461,18 @@ module Helpdesk
       if @store.delete(id)
         log_action("ticket.delete", "ticket ##{id}")
         puts "Soft-deleted ticket ##{id}."
+      else
+        puts "Ticket not found."
+      end
+    end
+
+    def restore_ticket(args)
+      return unless require_permission!(:ticket_write)
+
+      id = required_id(args)
+      if @store.restore(id)
+        log_action("ticket.restore", "ticket ##{id}")
+        puts "Restored ticket ##{id}."
       else
         puts "Ticket not found."
       end
@@ -2030,6 +2046,17 @@ module Helpdesk
           else
             { status: 404, error: "Ticket not found." }
           end
+        elsif method == "POST" && path.match?(%r{\A/tickets/\d+/restore\z})
+          return unless require_permission!(:ticket_write)
+
+          id = path.split("/")[2]
+          if @store.restore(id)
+            invalidate_api_cache!
+            log_action("ticket.restore", "ticket ##{id}")
+            { status: 200, data: { restored: true, id: id.to_i } }
+          else
+            { status: 404, error: "Ticket not found." }
+          end
         elsif method == "GET" && path == "/users"
           cached_api_response([@current_user&.id, method, path, body]) do
             { status: 200, data: @users.all.map { |user| api_user(user) } }
@@ -2300,6 +2327,9 @@ module Helpdesk
         when "--active"
           options[:active] = true
           idx += 1
+        when "--deleted"
+          options[:deleted] = true
+          idx += 1
         else
           idx += 1
         end
@@ -2368,9 +2398,10 @@ module Helpdesk
       escalation_marker = ticket.escalation_needed? ? " escalate" : ""
       pinned_marker = ticket.pinned? ? " pinned" : ""
       archived_marker = ticket.archived? ? " archived" : ""
+      deleted_marker = ticket.deleted? ? " deleted" : ""
       merged_marker = ticket.merged? ? " merged" : ""
       merged_from_marker = ticket.merged_from_ids.empty? ? "" : " merged_from:#{ticket.merged_from_ids.join(',')}"
-      "##{ticket.id} [#{ticket.ticket_type}/#{ticket.status}/#{ticket.priority}#{overdue_marker}#{sla_marker}#{escalation_marker}#{pinned_marker}#{archived_marker}#{merged_marker}#{merged_from_marker}] #{ticket.title}#{ticket.tags.empty? ? '' : " ##{ticket.tags.join(' #')}"}"
+      "##{ticket.id} [#{ticket.ticket_type}/#{ticket.status}/#{ticket.priority}#{overdue_marker}#{sla_marker}#{escalation_marker}#{pinned_marker}#{archived_marker}#{deleted_marker}#{merged_marker}#{merged_from_marker}] #{ticket.title}#{ticket.tags.empty? ? '' : " ##{ticket.tags.join(' #')}"}"
     end
 
     def format_sla_status(ticket)
@@ -2411,6 +2442,7 @@ module Helpdesk
       parts << "--overdue" if truthy_option?(options, :overdue)
       parts << "--archived" if truthy_option?(options, :archived)
       parts << "--active" if truthy_option?(options, :active)
+      parts << "--deleted" if truthy_option?(options, :deleted)
       parts.empty? ? "none" : parts.join(" ")
     end
 
@@ -3327,6 +3359,8 @@ module Helpdesk
           "updated #{subject}"
         when "ticket.delete"
           "deleted #{subject}"
+        when "ticket.restore"
+          "restored #{subject}"
         when "ticket.close"
           "closed #{subject}"
         when "ticket.status"
