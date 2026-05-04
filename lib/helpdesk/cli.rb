@@ -1,6 +1,7 @@
 require "shellwords"
 require "time"
 require "csv"
+require "json"
 require "fileutils"
 require "helpdesk/store"
 
@@ -74,6 +75,7 @@ module Helpdesk
           dashboard
           stats
           export csv [PATH]
+          export json [PATH]
           exit
       HELP
     end
@@ -301,8 +303,11 @@ module Helpdesk
       when "csv"
         path = args[1] || prompt("CSV path", "data/tickets.csv")
         export_csv(path)
+      when "json"
+        path = args[1] || prompt("JSON path", "data/tickets-export.json")
+        export_json(path)
       else
-        puts "Usage: export csv [PATH]"
+        puts "Usage: export csv [PATH] | export json [PATH]"
       end
     end
 
@@ -333,6 +338,13 @@ module Helpdesk
           ]
         end
       end
+      puts "Exported #{tickets.count} tickets to #{path}."
+    end
+
+    def export_json(path)
+      tickets = @store.all
+      FileUtils.mkdir_p(File.dirname(path))
+      File.write(path, JSON.pretty_generate(tickets.map(&:to_h)))
       puts "Exported #{tickets.count} tickets to #{path}."
     end
 
