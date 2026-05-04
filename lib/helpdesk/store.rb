@@ -48,6 +48,14 @@ module Helpdesk
       all.select { |existing| ticket.child_ids.include?(existing.id.to_i) }
     end
 
+    def dependencies_for(ticket)
+      all.select { |existing| ticket.dependency_ids.include?(existing.id.to_i) }
+    end
+
+    def dependent_tickets(ticket)
+      all.select { |existing| existing.dependency_ids.include?(ticket.id.to_i) }
+    end
+
     def relate(source_id, target_id)
       source_id = source_id.to_i
       target_id = target_id.to_i
@@ -143,6 +151,46 @@ module Helpdesk
       end
       save!(tickets)
       { child: child, parent: parent }
+    end
+
+    def add_dependency(ticket_id, dependency_id)
+      ticket_id = ticket_id.to_i
+      dependency_id = dependency_id.to_i
+      raise ArgumentError, "add_dependency requires two ticket IDs" if ticket_id.zero? || dependency_id.zero?
+      raise ArgumentError, "cannot add a dependency to itself" if ticket_id == dependency_id
+
+      tickets = load_data
+      ticket_index = tickets.index { |row| row["id"].to_i == ticket_id }
+      dependency_index = tickets.index { |row| row["id"].to_i == dependency_id }
+      return nil unless ticket_index && dependency_index
+
+      ticket = Ticket.from_h(tickets[ticket_index])
+      dependency = Ticket.from_h(tickets[dependency_index])
+      ticket.send(:add_dependency, dependency.id)
+
+      tickets[ticket_index] = ticket.to_h
+      save!(tickets)
+      { ticket: ticket, dependency: dependency }
+    end
+
+    def remove_dependency(ticket_id, dependency_id)
+      ticket_id = ticket_id.to_i
+      dependency_id = dependency_id.to_i
+      raise ArgumentError, "remove_dependency requires two ticket IDs" if ticket_id.zero? || dependency_id.zero?
+      raise ArgumentError, "cannot remove a dependency from itself" if ticket_id == dependency_id
+
+      tickets = load_data
+      ticket_index = tickets.index { |row| row["id"].to_i == ticket_id }
+      dependency_index = tickets.index { |row| row["id"].to_i == dependency_id }
+      return nil unless ticket_index && dependency_index
+
+      ticket = Ticket.from_h(tickets[ticket_index])
+      dependency = Ticket.from_h(tickets[dependency_index])
+      ticket.send(:remove_dependency, dependency.id)
+
+      tickets[ticket_index] = ticket.to_h
+      save!(tickets)
+      { ticket: ticket, dependency: dependency }
     end
 
     def find(id)

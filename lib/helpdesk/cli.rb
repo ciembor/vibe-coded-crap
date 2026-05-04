@@ -50,6 +50,7 @@ module Helpdesk
         when "merge" then merge_tickets(args)
         when "relate" then manage_relationships(args)
         when "parent" then manage_hierarchy(args)
+        when "dependency" then manage_dependencies(args)
         when "status" then change_status(args)
         when "comment" then add_comment(args)
         when "note" then add_note(args)
@@ -123,6 +124,9 @@ module Helpdesk
           parent set CHILD_ID PARENT_ID
           parent clear ID
           parent list ID
+          dependency add ID DEPENDENCY_ID
+          dependency remove ID DEPENDENCY_ID
+          dependency list ID
           status ID STATUS
           comment ID TEXT
           note ID TEXT
@@ -244,6 +248,7 @@ module Helpdesk
       puts "Merged from: #{ticket.merged_from_ids.map { |id| "##{id}" }.join(", ")}" unless ticket.merged_from_ids.empty?
       show_related_tickets(ticket)
       show_hierarchy(ticket)
+      show_dependencies(ticket)
       puts "Created: #{ticket.created_at}"
       puts "Updated: #{ticket.updated_at}"
       puts "Description:"
@@ -585,6 +590,69 @@ module Helpdesk
         end
       else
         puts "Usage: parent set CHILD_ID PARENT_ID | parent clear ID | parent list ID"
+      end
+    rescue ArgumentError => e
+      puts e.message
+    end
+
+    def manage_dependencies(args)
+      return unless require_permission!(:ticket_write)
+
+      action = args[0]
+      case action
+      when "add"
+        ticket_id = args[1]
+        dependency_id = args[2]
+        if ticket_id.to_s.strip.empty? || dependency_id.to_s.strip.empty?
+          puts "Usage: dependency add ID DEPENDENCY_ID"
+          return
+        end
+
+        result = @store.add_dependency(ticket_id, dependency_id)
+        unless result
+          puts "Ticket not found."
+          return
+        end
+
+        log_action("ticket.dependency_add", "ticket ##{ticket_id} depends on ##{dependency_id}", ticket: ticket_id.to_i, dependency: dependency_id.to_i)
+        puts "Added dependency ##{dependency_id} to ticket ##{ticket_id}."
+      when "remove"
+        ticket_id = args[1]
+        dependency_id = args[2]
+        if ticket_id.to_s.strip.empty? || dependency_id.to_s.strip.empty?
+          puts "Usage: dependency remove ID DEPENDENCY_ID"
+          return
+        end
+
+        result = @store.remove_dependency(ticket_id, dependency_id)
+        unless result
+          puts "Ticket not found."
+          return
+        end
+
+        log_action("ticket.dependency_remove", "ticket ##{ticket_id} depends on ##{dependency_id}", ticket: ticket_id.to_i, dependency: dependency_id.to_i)
+        puts "Removed dependency ##{dependency_id} from ticket ##{ticket_id}."
+      when "list"
+        id = required_id(args.drop(1))
+        ticket = @store.find(id)
+        return puts "Ticket not found." unless ticket
+
+        dependencies = @store.dependencies_for(ticket)
+        dependents = @store.dependent_tickets(ticket)
+        puts "Depends on:"
+        if dependencies.empty?
+          puts "  none"
+        else
+          dependencies.each { |dependency| puts "  #{format_ticket_row(dependency)}" }
+        end
+        puts "Blocked by:"
+        if dependents.empty?
+          puts "  none"
+        else
+          dependents.each { |dependent| puts "  #{format_ticket_row(dependent)}" }
+        end
+      else
+        puts "Usage: dependency add ID DEPENDENCY_ID | dependency remove ID DEPENDENCY_ID | dependency list ID"
       end
     rescue ArgumentError => e
       puts e.message
@@ -2059,6 +2127,29 @@ module Helpdesk
       end
     end
 
+    def show_dependencies(ticket)
+      dependencies = @store.dependencies_for(ticket)
+      dependents = @store.dependent_tickets(ticket)
+
+      puts "Depends on:"
+      if dependencies.empty?
+        puts "  none"
+      else
+        dependencies.each do |dependency|
+          puts "  #{format_ticket_row(dependency)}"
+        end
+      end
+
+      puts "Blocked by:"
+      if dependents.empty?
+        puts "  none"
+      else
+        dependents.each do |dependent|
+          puts "  #{format_ticket_row(dependent)}"
+        end
+      end
+    end
+
     def show_sla_rules
       rules = @sla_rules.all
       rules.each do |priority, rule|
@@ -2675,6 +2766,10 @@ module Helpdesk
           "set parent for #{subject}"
         when "ticket.parent_clear"
           "cleared parent for #{subject}"
+        when "ticket.dependency_add"
+          "added dependency to #{subject}"
+        when "ticket.dependency_remove"
+          "removed dependency from #{subject}"
         when "ticket.archive"
           "archived #{subject}"
         when "ticket.unarchive"
