@@ -51,6 +51,7 @@ module Helpdesk
         when "import" then import(args)
         when "users" then list_users
         when "user" then manage_users(args)
+        when "notify" then manage_notifications(args)
         when "whoami" then whoami
         when "audit" then audit(args)
         when "exit", "quit" then break
@@ -101,6 +102,8 @@ module Helpdesk
           user add
           user switch ID
           user role ID ROLE
+          notify show
+          notify set KEY VALUE
           whoami
           audit [--last N] [--action ACTION] [--actor NAME] [--subject TEXT]
           exit
@@ -566,9 +569,28 @@ module Helpdesk
     def whoami
       if @current_user
         puts "Current user: ##{@current_user.id} #{@current_user.display_name} (role: #{@current_user.role_label})"
+        puts "Notification prefs: #{@current_user.notification_preferences_label}"
       else
         puts "No current user."
       end
+    end
+
+    def manage_notifications(args)
+      action = args[0]
+      case action
+      when "show"
+        show_notification_preferences
+      when "set"
+        key = args[1]
+        value = args[2]
+        return puts "Usage: notify set KEY VALUE" if key.to_s.strip.empty? || value.to_s.strip.empty?
+
+        update_notification_preferences(key, value)
+      else
+        puts "Usage: notify show | notify set KEY VALUE"
+      end
+    rescue ArgumentError => e
+      puts e.message
     end
 
     def audit(args)
@@ -729,6 +751,41 @@ module Helpdesk
       return unless @users.all.empty?
 
       @users.create(name: "agent", email: "", role: "agent")
+    end
+
+    def show_notification_preferences
+      prefs = @current_user.notification_preferences || {}
+      if prefs.empty?
+        puts "No notification preferences."
+        return
+      end
+
+      prefs.each do |key, value|
+        puts "#{key}: #{value}"
+      end
+    end
+
+    def update_notification_preferences(key, value)
+      prefs = (@current_user.notification_preferences || {}).dup
+      prefs[key.to_s] = parse_boolean(value)
+      updated_user = @users.update(@current_user.id, notification_preferences: prefs)
+      if updated_user
+        @current_user = updated_user
+      else
+        @current_user.notification_preferences = prefs
+        @users.save_user(@current_user)
+      end
+      log_action("user.notification_preferences", "user ##{@current_user.id}", notification_preferences: prefs)
+      puts "Updated notification preference #{key} to #{prefs[key.to_s]}."
+    end
+
+    def parse_boolean(value)
+      case value.to_s.strip.downcase
+      when "true", "yes", "on", "1" then true
+      when "false", "no", "off", "0" then false
+      else
+        raise ArgumentError, "invalid boolean value: #{value}"
+      end
     end
 
     def log_action(action, subject, details = {})
