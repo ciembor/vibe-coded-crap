@@ -6,7 +6,7 @@ module Helpdesk
     STATUSES = %w[open in_progress waiting resolved closed].freeze
     PRIORITIES = %w[low medium high urgent].freeze
 
-    attr_accessor :id, :title, :description, :status, :priority, :tags, :comments, :internal_notes, :watchers, :attachments, :created_at, :updated_at, :closed_at, :due_at, :reminder_at, :reminder_repeat
+    attr_accessor :id, :title, :description, :status, :priority, :tags, :comments, :internal_notes, :watchers, :attachments, :pinned, :pinned_at, :created_at, :updated_at, :closed_at, :due_at, :reminder_at, :reminder_repeat
 
     def self.from_h(hash)
       ticket = new(
@@ -20,6 +20,8 @@ module Helpdesk
         internal_notes: hash["internal_notes"] || [],
         watchers: hash["watchers"] || [],
         attachments: hash["attachments"] || [],
+        pinned: hash["pinned"],
+        pinned_at: hash["pinned_at"],
         created_at: hash["created_at"],
         updated_at: hash["updated_at"],
         closed_at: hash["closed_at"],
@@ -31,7 +33,7 @@ module Helpdesk
       ticket
     end
 
-    def initialize(id: nil, title: "", description: "", status: "open", priority: "medium", tags: [], comments: [], internal_notes: [], watchers: [], attachments: [], created_at: nil, updated_at: nil, closed_at: nil, due_at: nil, reminder_at: nil, reminder_repeat: nil)
+    def initialize(id: nil, title: "", description: "", status: "open", priority: "medium", tags: [], comments: [], internal_notes: [], watchers: [], attachments: [], pinned: false, pinned_at: nil, created_at: nil, updated_at: nil, closed_at: nil, due_at: nil, reminder_at: nil, reminder_repeat: nil)
       @id = id
       @title = title
       @description = description
@@ -42,6 +44,8 @@ module Helpdesk
       @internal_notes = internal_notes.dup
       @watchers = watchers.dup
       @attachments = attachments.dup
+      @pinned = pinned
+      @pinned_at = pinned_at
       @created_at = created_at
       @updated_at = updated_at
       @closed_at = closed_at
@@ -85,6 +89,8 @@ module Helpdesk
           "created_at" => attachment["created_at"] || attachment[:created_at] || Time.now.utc.iso8601
         }
       end
+      self.pinned = normalize_pinned(pinned)
+      self.pinned_at = pinned? ? (pinned_at || Time.now.utc.iso8601) : nil
       self.created_at ||= Time.now.utc.iso8601
       self.updated_at ||= created_at
       self.closed_at = nil unless closed?
@@ -110,6 +116,10 @@ module Helpdesk
           "uploaded_by" => attachment["uploaded_by"] || attachment[:uploaded_by] || "agent",
           "created_at" => attachment["created_at"] || attachment[:created_at] || Time.now.utc.iso8601
         }
+      end
+      if attrs.key?(:pinned)
+        self.pinned = !!attrs[:pinned]
+        self.pinned_at = pinned? ? (attrs.fetch(:pinned_at, pinned_at) || Time.now.utc.iso8601) : nil
       end
       self.updated_at = Time.now.utc.iso8601
       self.closed_at = Time.now.utc.iso8601 if closed?
@@ -176,6 +186,20 @@ module Helpdesk
       self.updated_at = Time.now.utc.iso8601
     end
 
+    def pin!
+      self.pinned = true
+      self.pinned_at = Time.now.utc.iso8601
+      self.updated_at = Time.now.utc.iso8601
+      self
+    end
+
+    def unpin!
+      self.pinned = false
+      self.pinned_at = nil
+      self.updated_at = Time.now.utc.iso8601
+      self
+    end
+
     def remove_attachment(attachment_id)
       attachment_id = attachment_id.to_i
       original_count = attachments.count
@@ -194,6 +218,10 @@ module Helpdesk
 
     def closed?
       status == "closed"
+    end
+
+    def pinned?
+      !!pinned
     end
 
     def due_date
@@ -258,6 +286,8 @@ module Helpdesk
         "internal_notes" => internal_notes,
         "watchers" => watchers,
         "attachments" => attachments,
+        "pinned" => pinned?,
+        "pinned_at" => pinned_at,
         "created_at" => created_at,
         "updated_at" => updated_at,
         "closed_at" => closed_at,
@@ -313,6 +343,17 @@ module Helpdesk
       return value if %w[daily weekly monthly].include?(value)
 
       raise ArgumentError, "invalid reminder repeat: #{value}"
+    end
+
+    def normalize_pinned(value)
+      case value
+      when true, false
+        value
+      when nil
+        false
+      else
+        %w[true yes on 1].include?(value.to_s.strip.downcase)
+      end
     end
 
     def next_comment_id

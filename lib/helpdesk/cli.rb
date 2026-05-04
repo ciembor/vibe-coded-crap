@@ -41,6 +41,7 @@ module Helpdesk
         when "note" then add_note(args)
         when "watch" then manage_watchers(args)
         when "attach" then manage_attachments(args)
+        when "pin" then manage_pins(args)
         when "tag" then manage_tags(args)
         when "search" then search(args)
         when "activity" then activity(args)
@@ -95,6 +96,9 @@ module Helpdesk
           attach add ID NAME [CONTENT_TYPE] [SIZE] [DESCRIPTION]
           attach remove ID ATTACHMENT_ID
           attach list ID
+          pin add ID
+          pin remove ID
+          pin list
           tag add ID [ID ...] TAG
           tag remove ID [ID ...] TAG
           search QUERY
@@ -150,6 +154,8 @@ module Helpdesk
       puts "Reminder repeat: #{ticket.reminder_repeat || 'none'}"
       puts "Reminder due: #{ticket.reminder_due? ? 'yes' : 'no'}"
       puts "Tags: #{ticket.tags.join(", ")}"
+      puts "Pinned: #{ticket.pinned? ? 'yes' : 'no'}"
+      puts "Pinned at: #{ticket.pinned_at || 'none'}"
       puts "Created: #{ticket.created_at}"
       puts "Updated: #{ticket.updated_at}"
       puts "Description:"
@@ -196,6 +202,15 @@ module Helpdesk
       end
       activity = activity_entries_for_ticket(ticket.id)
       puts "Activity:"
+      if activity.empty?
+        puts "  none"
+      else
+        activity.each do |entry|
+          puts "  #{format_activity_entry(entry)}"
+        end
+      end
+      puts "Activity:"
+      activity = activity_entries_for_ticket(ticket.id)
       if activity.empty?
         puts "  none"
       else
@@ -436,6 +451,45 @@ module Helpdesk
         end
       else
         puts "Usage: attach add ID NAME [CONTENT_TYPE] [SIZE] [DESCRIPTION] | attach remove ID ATTACHMENT_ID | attach list ID"
+      end
+    rescue ArgumentError => e
+      puts e.message
+    end
+
+    def manage_pins(args)
+      return unless require_permission!(:ticket_write)
+
+      action = args[0]
+      case action
+      when "add"
+        id = required_id(args.drop(1))
+        ticket = @store.find(id)
+        return puts "Ticket not found." unless ticket
+
+        ticket.pin!
+        @store.save_ticket(ticket)
+        log_action("ticket.pin", "ticket ##{id}")
+        puts "Pinned ticket ##{id}."
+      when "remove"
+        id = required_id(args.drop(1))
+        ticket = @store.find(id)
+        return puts "Ticket not found." unless ticket
+
+        ticket.unpin!
+        @store.save_ticket(ticket)
+        log_action("ticket.unpin", "ticket ##{id}")
+        puts "Unpinned ticket ##{id}."
+      when "list"
+        tickets = @store.all.select(&:pinned?)
+        if tickets.empty?
+          puts "No pinned tickets."
+        else
+          tickets.sort_by { |ticket| [ticket.updated_at.to_s, ticket.created_at.to_s] }.reverse.each do |ticket|
+            puts format_ticket_row(ticket)
+          end
+        end
+      else
+        puts "Usage: pin add ID | pin remove ID | pin list"
       end
     rescue ArgumentError => e
       puts e.message
@@ -776,15 +830,16 @@ module Helpdesk
       case sort
       when "priority"
         order = Ticket::PRIORITIES.each_with_index.to_h
-        tickets.sort_by { |ticket| order.fetch(ticket.priority, 99) }
+        tickets.sort_by { |ticket| [ticket.pinned? ? 0 : 1, order.fetch(ticket.priority, 99), ticket.created_at.to_s] }
       else
-        tickets.sort_by { |ticket| ticket.created_at }
+        tickets.sort_by { |ticket| [ticket.pinned? ? 0 : 1, ticket.created_at.to_s] }
       end
     end
 
     def format_ticket_row(ticket)
       overdue_marker = ticket.overdue? ? " overdue" : ""
-      "##{ticket.id} [#{ticket.status}/#{ticket.priority}#{overdue_marker}] #{ticket.title}#{ticket.tags.empty? ? '' : " ##{ticket.tags.join(' #')}"}"
+      pinned_marker = ticket.pinned? ? " pinned" : ""
+      "##{ticket.id} [#{ticket.status}/#{ticket.priority}#{overdue_marker}#{pinned_marker}] #{ticket.title}#{ticket.tags.empty? ? '' : " ##{ticket.tags.join(' #')}"}"
     end
 
     def overdue
