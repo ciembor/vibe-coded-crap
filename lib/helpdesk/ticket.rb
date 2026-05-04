@@ -1,3 +1,4 @@
+require "date"
 require "time"
 
 module Helpdesk
@@ -5,7 +6,7 @@ module Helpdesk
     STATUSES = %w[open in_progress waiting resolved closed].freeze
     PRIORITIES = %w[low medium high urgent].freeze
 
-    attr_accessor :id, :title, :description, :status, :priority, :tags, :comments, :created_at, :updated_at, :closed_at
+    attr_accessor :id, :title, :description, :status, :priority, :tags, :comments, :created_at, :updated_at, :closed_at, :due_at
 
     def self.from_h(hash)
       ticket = new(
@@ -18,13 +19,14 @@ module Helpdesk
         comments: hash["comments"] || [],
         created_at: hash["created_at"],
         updated_at: hash["updated_at"],
-        closed_at: hash["closed_at"]
+        closed_at: hash["closed_at"],
+        due_at: hash["due_at"]
       )
       ticket.normalize!
       ticket
     end
 
-    def initialize(id: nil, title: "", description: "", status: "open", priority: "medium", tags: [], comments: [], created_at: nil, updated_at: nil, closed_at: nil)
+    def initialize(id: nil, title: "", description: "", status: "open", priority: "medium", tags: [], comments: [], created_at: nil, updated_at: nil, closed_at: nil, due_at: nil)
       @id = id
       @title = title
       @description = description
@@ -35,11 +37,13 @@ module Helpdesk
       @created_at = created_at
       @updated_at = updated_at
       @closed_at = closed_at
+      @due_at = due_at
     end
 
     def normalize!
       self.status = normalize_status(status)
       self.priority = normalize_priority(priority)
+      self.due_at = normalize_due_at(due_at)
       self.tags = Array(tags).map { |tag| tag.to_s.strip }.reject(&:empty?).uniq.sort
       self.comments = Array(comments).map do |comment|
         {
@@ -60,6 +64,7 @@ module Helpdesk
       self.description = attrs.fetch(:description, description)
       self.status = normalize_status(attrs.fetch(:status, status))
       self.priority = normalize_priority(attrs.fetch(:priority, priority))
+      self.due_at = normalize_due_at(attrs.fetch(:due_at, due_at))
       self.tags = Array(attrs.fetch(:tags, tags)).map { |tag| tag.to_s.strip }.reject(&:empty?).uniq.sort
       self.updated_at = Time.now.utc.iso8601
       self.closed_at = Time.now.utc.iso8601 if closed?
@@ -95,6 +100,21 @@ module Helpdesk
       status == "closed"
     end
 
+    def due_date
+      return nil if due_at.to_s.strip.empty?
+
+      Date.parse(due_at)
+    rescue ArgumentError
+      nil
+    end
+
+    def overdue?
+      return false if closed? || status == "resolved"
+
+      date = due_date
+      date && date < Date.today
+    end
+
     def to_h
       {
         "id" => id,
@@ -106,7 +126,8 @@ module Helpdesk
         "comments" => comments,
         "created_at" => created_at,
         "updated_at" => updated_at,
-        "closed_at" => closed_at
+        "closed_at" => closed_at,
+        "due_at" => due_at
       }
     end
 
@@ -129,6 +150,15 @@ module Helpdesk
       return value if PRIORITIES.include?(value)
 
       raise ArgumentError, "invalid priority: #{value}"
+    end
+
+    def normalize_due_at(value)
+      value = value.to_s.strip
+      return nil if value.empty?
+
+      Date.parse(value).iso8601
+    rescue ArgumentError
+      raise ArgumentError, "invalid due date: #{value}"
     end
 
     def next_comment_id

@@ -28,7 +28,8 @@ module Helpdesk
         description: attrs.fetch(:description, ""),
         status: attrs.fetch(:status, "open"),
         priority: attrs.fetch(:priority, "medium"),
-        tags: attrs.fetch(:tags, [])
+        tags: attrs.fetch(:tags, []),
+        due_at: attrs.fetch(:due_at, nil)
       ).normalize!
       tickets << ticket.to_h
       save!(tickets)

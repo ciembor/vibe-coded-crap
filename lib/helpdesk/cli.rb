@@ -30,6 +30,7 @@ module Helpdesk
         when "comment" then add_comment(args)
         when "tag" then manage_tags(args)
         when "search" then search(args)
+        when "overdue" then overdue
         when "stats" then stats
         when "exit", "quit" then break
         else
@@ -48,7 +49,8 @@ module Helpdesk
       puts <<~HELP
         Commands:
           help
-          list [--status STATUS] [--priority PRIORITY] [--tag TAG] [--sort created_at|priority]
+          list [--status STATUS] [--priority PRIORITY] [--tag TAG] [--sort created_at|priority] [--overdue]
+          overdue
           show ID
           new
           edit ID
@@ -69,6 +71,7 @@ module Helpdesk
       tickets = tickets.select { |ticket| ticket.status == options[:status] } if options[:status]
       tickets = tickets.select { |ticket| ticket.priority == options[:priority] } if options[:priority]
       tickets = tickets.select { |ticket| ticket.tags.include?(options[:tag]) } if options[:tag]
+      tickets = tickets.select(&:overdue?) if options[:overdue]
       tickets = sort_tickets(tickets, options[:sort])
 
       if tickets.empty?
@@ -86,6 +89,8 @@ module Helpdesk
       puts "##{ticket.id} #{ticket.title}"
       puts "Status: #{ticket.status}"
       puts "Priority: #{ticket.priority}"
+      puts "Due: #{ticket.due_at || 'none'}"
+      puts "Overdue: #{ticket.overdue? ? 'yes' : 'no'}"
       puts "Tags: #{ticket.tags.join(", ")}"
       puts "Created: #{ticket.created_at}"
       puts "Updated: #{ticket.updated_at}"
@@ -106,12 +111,14 @@ module Helpdesk
       description = prompt("Description")
       status = prompt("Status", "open")
       priority = prompt("Priority", "medium")
+      due_at = prompt("Due date (YYYY-MM-DD)", "")
       tags = prompt("Tags (comma separated)", "").split(",").map(&:strip).reject(&:empty?)
       ticket = @store.create(
         title: title,
         description: description,
         status: status,
         priority: priority,
+        due_at: due_at,
         tags: tags
       )
       puts "Created ticket ##{ticket.id}."
@@ -129,6 +136,7 @@ module Helpdesk
       attrs[:description] = prompt("Description", ticket.description)
       attrs[:status] = prompt("Status", ticket.status)
       attrs[:priority] = prompt("Priority", ticket.priority)
+      attrs[:due_at] = prompt("Due date (YYYY-MM-DD)", ticket.due_at || "")
       attrs[:tags] = prompt("Tags (comma separated)", ticket.tags.join(", ")).split(",").map(&:strip).reject(&:empty?)
       @store.update(id, attrs)
       puts "Updated ticket ##{id}."
@@ -221,6 +229,7 @@ module Helpdesk
       tickets = @store.all
       counts = tickets.group_by(&:status).transform_values(&:count)
       puts "Total tickets: #{tickets.count}"
+      puts "Overdue: #{tickets.count(&:overdue?)}"
       puts "Open: #{counts.fetch("open", 0)}"
       puts "In progress: #{counts.fetch("in_progress", 0)}"
       puts "Waiting: #{counts.fetch("waiting", 0)}"
@@ -258,6 +267,9 @@ module Helpdesk
         when "--sort"
           options[:sort] = args[idx + 1]
           idx += 2
+        when "--overdue"
+          options[:overdue] = true
+          idx += 1
         else
           idx += 1
         end
@@ -276,7 +288,18 @@ module Helpdesk
     end
 
     def format_ticket_row(ticket)
-      "##{ticket.id} [#{ticket.status}/#{ticket.priority}] #{ticket.title}#{ticket.tags.empty? ? '' : " ##{ticket.tags.join(' #')}"}"
+      overdue_marker = ticket.overdue? ? " overdue" : ""
+      "##{ticket.id} [#{ticket.status}/#{ticket.priority}#{overdue_marker}] #{ticket.title}#{ticket.tags.empty? ? '' : " ##{ticket.tags.join(' #')}"}"
+    end
+
+    def overdue
+      tickets = @store.all.select(&:overdue?)
+      if tickets.empty?
+        puts "No overdue tickets."
+        return
+      end
+
+      tickets.each { |ticket| puts format_ticket_row(ticket) }
     end
 
     def required_id(args)
