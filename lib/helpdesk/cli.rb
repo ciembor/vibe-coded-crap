@@ -10,6 +10,7 @@ require "helpdesk/sla_rule_store"
 require "helpdesk/sort_rule_store"
 require "helpdesk/template_store"
 require "helpdesk/user_store"
+require "helpdesk/webhook_store"
 
 module Helpdesk
   class CLI
@@ -21,6 +22,7 @@ module Helpdesk
       @sort_rules = SortRuleStore.new
       @templates = TemplateStore.new
       @users = UserStore.new
+      @webhooks = WebhookStore.new
       @escalation_rules.reload_ticket_rules!
       @sla_rules.reload_ticket_rules!
       seed_default_user
@@ -86,6 +88,8 @@ module Helpdesk
         when "notify" then manage_notifications(args)
         when "whoami" then whoami
         when "audit" then audit(args)
+        when "webhook" then manage_webhooks(args)
+        when "webhooks" then list_webhooks
         when "exit", "quit" then break
         else
           puts "Unknown command: #{command}. Type 'help'."
@@ -197,6 +201,10 @@ module Helpdesk
           notify email ID [BODY]
           whoami
           audit [--last N] [--action ACTION] [--actor NAME] [--subject TEXT]
+          webhooks
+          webhook add NAME URL [EVENT ...]
+          webhook remove ID
+          webhook test ID [EVENT]
           exit
       HELP
     end
@@ -1721,6 +1729,60 @@ module Helpdesk
       end
     end
 
+    def list_webhooks
+      webhooks = @webhooks.all
+      if webhooks.empty?
+        puts "No webhooks."
+        return
+      end
+
+      webhooks.each do |webhook|
+        puts "##{webhook["id"]} #{webhook["name"]} #{webhook["url"]} events=#{Array(webhook["events"]).join(",")}"
+      end
+    end
+
+    def manage_webhooks(args)
+      action = args[0]
+      case action
+      when "add"
+        return unless require_permission!(:admin)
+
+        name = args[1]
+        url = args[2]
+        events = args.drop(3)
+        if name.to_s.strip.empty? || url.to_s.strip.empty?
+          puts "Usage: webhook add NAME URL [EVENT ...]"
+          return
+        end
+
+        webhook = @webhooks.create(name: name, url: url, events: events)
+        puts "Created webhook ##{webhook["id"]}."
+      when "remove"
+        return unless require_permission!(:admin)
+
+        id = required_id(args.drop(1))
+        if @webhooks.delete(id)
+          puts "Removed webhook ##{id}."
+        else
+          puts "Webhook not found."
+        end
+      when "test"
+        return unless require_permission!(:admin)
+
+        id = required_id(args.drop(1))
+        webhook = @webhooks.find(id)
+        return puts "Webhook not found." unless webhook
+
+        event = args[2].to_s.strip
+        event = "webhook.test" if event.empty?
+        deliver_webhook(webhook, webhook_payload(event, "webhook ##{webhook["id"]}", { "test" => true }))
+      else
+        puts "Usage: webhook add NAME URL [EVENT ...] | webhook remove ID | webhook test ID [EVENT]"
+      end
+    rescue ArgumentError => e
+      puts e.message
+    end
+
     def activity(args)
       options = parse_activity_options(args)
       entries = @audit_log.all.select { |entry| activity_visible?(entry) }
@@ -2667,6 +2729,31 @@ module Helpdesk
     def log_action(action, subject, details = {})
       actor = @current_user ? @current_user.display_name : "system"
       @audit_log.append(action: action, actor: actor, subject: subject, details: details)
+      dispatch_webhooks(action, actor, subject, details)
+    end
+
+    def dispatch_webhooks(action, actor, subject, details)
+      @webhooks.matching(action).each do |webhook|
+        payload = webhook_payload(action, subject, details, actor: actor)
+        deliver_webhook(webhook, payload)
+      end
+    end
+
+    def webhook_payload(action, subject, details, actor: nil)
+      {
+        "action" => action,
+        "subject" => subject,
+        "actor" => actor || (@current_user ? @current_user.display_name : "system"),
+        "details" => details,
+        "created_at" => Time.now.utc.iso8601
+      }
+    end
+
+    def deliver_webhook(webhook, payload)
+      puts "[webhook mock] POST #{webhook["url"]}"
+      puts "[webhook mock] Webhook ##{webhook["id"]} #{webhook["name"]}"
+      puts "[webhook mock] Event: #{payload["action"]}"
+      puts "[webhook mock] Payload: #{JSON.generate(payload)}"
     end
 
     def parse_audit_options(args)
