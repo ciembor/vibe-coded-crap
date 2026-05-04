@@ -1,0 +1,6 @@
+GPT 5.4-Mini
+Reasoning: Medium
+
+First prompt: Build a plain Ruby terminal app from BACKLOG.md, use JSON or YAML for persistence, prioritize shipping working features over refactoring, and commit after each completed task.
+
+Next prompts: Implement the next unfinished task from BACKLOG.md and commit it.
