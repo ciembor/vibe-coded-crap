@@ -29,6 +29,7 @@ module Helpdesk
         status: attrs.fetch(:status, "open"),
         priority: attrs.fetch(:priority, "medium"),
         tags: attrs.fetch(:tags, []),
+        internal_notes: attrs.fetch(:internal_notes, []),
         due_at: attrs.fetch(:due_at, nil),
         reminder_at: attrs.fetch(:reminder_at, nil),
         reminder_repeat: attrs.fetch(:reminder_repeat, nil)

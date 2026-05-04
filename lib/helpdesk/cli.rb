@@ -38,6 +38,7 @@ module Helpdesk
         when "close" then close_tickets(args)
         when "status" then change_status(args)
         when "comment" then add_comment(args)
+        when "note" then add_note(args)
         when "tag" then manage_tags(args)
         when "search" then search(args)
         when "overdue" then overdue
@@ -83,6 +84,7 @@ module Helpdesk
           close ID [ID ...]
           status ID STATUS
           comment ID TEXT
+          note ID TEXT
           tag add ID [ID ...] TAG
           tag remove ID [ID ...] TAG
           search QUERY
@@ -141,6 +143,14 @@ module Helpdesk
       else
         ticket.comments.each do |comment|
           puts "  [#{comment["id"]}] #{comment["author"]} @ #{comment["created_at"]}: #{comment["body"]}"
+        end
+      end
+      puts "Internal notes:"
+      if ticket.internal_notes.empty?
+        puts "  none"
+      else
+        ticket.internal_notes.each do |note|
+          puts "  [#{note["id"]}] #{note["author"]} @ #{note["created_at"]}: #{note["body"]}"
         end
       end
     end
@@ -254,6 +264,21 @@ module Helpdesk
       @store.save_ticket(ticket)
       log_action("ticket.comment", "ticket ##{id}", author: current_user_name)
       puts "Added comment to ticket ##{id}."
+    end
+
+    def add_note(args)
+      return unless require_permission!(:ticket_write)
+
+      id = required_id(args)
+      ticket = @store.find(id)
+      return puts "Ticket not found." unless ticket
+
+      body = args.drop(1).join(" ")
+      body = prompt("Note") if body.strip.empty?
+      ticket.add_internal_note(body: body, author: prompt("Author", current_user_name))
+      @store.save_ticket(ticket)
+      log_action("ticket.note", "ticket ##{id}", author: current_user_name)
+      puts "Added internal note to ticket ##{id}."
     end
 
     def manage_tags(args)

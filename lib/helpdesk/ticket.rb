@@ -6,7 +6,7 @@ module Helpdesk
     STATUSES = %w[open in_progress waiting resolved closed].freeze
     PRIORITIES = %w[low medium high urgent].freeze
 
-    attr_accessor :id, :title, :description, :status, :priority, :tags, :comments, :created_at, :updated_at, :closed_at, :due_at, :reminder_at, :reminder_repeat
+    attr_accessor :id, :title, :description, :status, :priority, :tags, :comments, :internal_notes, :created_at, :updated_at, :closed_at, :due_at, :reminder_at, :reminder_repeat
 
     def self.from_h(hash)
       ticket = new(
@@ -17,6 +17,7 @@ module Helpdesk
         priority: hash["priority"],
         tags: hash["tags"] || [],
         comments: hash["comments"] || [],
+        internal_notes: hash["internal_notes"] || [],
         created_at: hash["created_at"],
         updated_at: hash["updated_at"],
         closed_at: hash["closed_at"],
@@ -28,7 +29,7 @@ module Helpdesk
       ticket
     end
 
-    def initialize(id: nil, title: "", description: "", status: "open", priority: "medium", tags: [], comments: [], created_at: nil, updated_at: nil, closed_at: nil, due_at: nil, reminder_at: nil, reminder_repeat: nil)
+    def initialize(id: nil, title: "", description: "", status: "open", priority: "medium", tags: [], comments: [], internal_notes: [], created_at: nil, updated_at: nil, closed_at: nil, due_at: nil, reminder_at: nil, reminder_repeat: nil)
       @id = id
       @title = title
       @description = description
@@ -36,6 +37,7 @@ module Helpdesk
       @priority = priority
       @tags = tags.dup
       @comments = comments.dup
+      @internal_notes = internal_notes.dup
       @created_at = created_at
       @updated_at = updated_at
       @closed_at = closed_at
@@ -57,6 +59,14 @@ module Helpdesk
           "body" => comment["body"] || comment[:body],
           "author" => comment["author"] || comment[:author] || "agent",
           "created_at" => comment["created_at"] || comment[:created_at] || Time.now.utc.iso8601
+        }
+      end
+      self.internal_notes = Array(internal_notes).map do |note|
+        {
+          "id" => note["id"] || note[:id],
+          "body" => note["body"] || note[:body],
+          "author" => note["author"] || note[:author] || "agent",
+          "created_at" => note["created_at"] || note[:created_at] || Time.now.utc.iso8601
         }
       end
       self.created_at ||= Time.now.utc.iso8601
@@ -83,6 +93,16 @@ module Helpdesk
     def add_comment(body:, author: "agent")
       self.comments << {
         "id" => next_comment_id,
+        "body" => body,
+        "author" => author,
+        "created_at" => Time.now.utc.iso8601
+      }
+      self.updated_at = Time.now.utc.iso8601
+    end
+
+    def add_internal_note(body:, author: "agent")
+      self.internal_notes << {
+        "id" => next_internal_note_id,
         "body" => body,
         "author" => author,
         "created_at" => Time.now.utc.iso8601
@@ -167,6 +187,7 @@ module Helpdesk
         "priority" => priority,
         "tags" => tags,
         "comments" => comments,
+        "internal_notes" => internal_notes,
         "created_at" => created_at,
         "updated_at" => updated_at,
         "closed_at" => closed_at,
@@ -226,6 +247,10 @@ module Helpdesk
 
     def next_comment_id
       (comments.map { |comment| comment["id"].to_i }.max || 0) + 1
+    end
+
+    def next_internal_note_id
+      (internal_notes.map { |note| note["id"].to_i }.max || 0) + 1
     end
   end
 end
