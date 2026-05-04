@@ -6,7 +6,7 @@ module Helpdesk
     STATUSES = %w[open in_progress waiting resolved closed].freeze
     PRIORITIES = %w[low medium high urgent].freeze
 
-    attr_accessor :id, :title, :description, :status, :priority, :tags, :comments, :internal_notes, :watchers, :attachments, :custom_fields, :ticket_type, :pinned, :pinned_at, :archived, :archived_at, :created_at, :updated_at, :closed_at, :due_at, :reminder_at, :reminder_repeat
+    attr_accessor :id, :title, :description, :status, :priority, :tags, :comments, :internal_notes, :watchers, :attachments, :custom_fields, :ticket_type, :merged_into_id, :merged_from_ids, :pinned, :pinned_at, :archived, :archived_at, :created_at, :updated_at, :closed_at, :due_at, :reminder_at, :reminder_repeat
 
     def self.from_h(hash)
       ticket = new(
@@ -22,6 +22,8 @@ module Helpdesk
         attachments: hash["attachments"] || [],
         custom_fields: hash["custom_fields"] || {},
         ticket_type: hash["ticket_type"],
+        merged_into_id: hash["merged_into_id"],
+        merged_from_ids: hash["merged_from_ids"] || [],
         pinned: hash["pinned"],
         pinned_at: hash["pinned_at"],
         archived: hash["archived"],
@@ -37,7 +39,7 @@ module Helpdesk
       ticket
     end
 
-    def initialize(id: nil, title: "", description: "", status: "open", priority: "medium", tags: [], comments: [], internal_notes: [], watchers: [], attachments: [], custom_fields: {}, ticket_type: "general", pinned: false, pinned_at: nil, archived: false, archived_at: nil, created_at: nil, updated_at: nil, closed_at: nil, due_at: nil, reminder_at: nil, reminder_repeat: nil)
+    def initialize(id: nil, title: "", description: "", status: "open", priority: "medium", tags: [], comments: [], internal_notes: [], watchers: [], attachments: [], custom_fields: {}, ticket_type: "general", merged_into_id: nil, merged_from_ids: [], pinned: false, pinned_at: nil, archived: false, archived_at: nil, created_at: nil, updated_at: nil, closed_at: nil, due_at: nil, reminder_at: nil, reminder_repeat: nil)
       @id = id
       @title = title
       @description = description
@@ -50,6 +52,8 @@ module Helpdesk
       @attachments = attachments.dup
       @custom_fields = custom_fields
       @ticket_type = ticket_type
+      @merged_into_id = merged_into_id
+      @merged_from_ids = merged_from_ids
       @pinned = pinned
       @pinned_at = pinned_at
       @archived = archived
@@ -70,6 +74,8 @@ module Helpdesk
       self.reminder_repeat = normalize_reminder_repeat(reminder_repeat)
       self.tags = Array(tags).map { |tag| tag.to_s.strip }.reject(&:empty?).uniq.sort
       self.ticket_type = normalize_ticket_type(ticket_type)
+      self.merged_into_id = merged_into_id.to_i.zero? ? nil : merged_into_id.to_i
+      self.merged_from_ids = Array(merged_from_ids).map(&:to_i).reject(&:zero?).uniq.sort
       self.comments = Array(comments).map do |comment|
         {
           "id" => comment["id"] || comment[:id],
@@ -131,6 +137,9 @@ module Helpdesk
       end
       self.custom_fields = normalize_custom_fields(attrs.fetch(:custom_fields, custom_fields))
       self.ticket_type = normalize_ticket_type(attrs.fetch(:ticket_type, ticket_type))
+      self.merged_into_id = attrs.key?(:merged_into_id) ? attrs[:merged_into_id].to_i : merged_into_id.to_i
+      self.merged_into_id = nil if self.merged_into_id.zero?
+      self.merged_from_ids = Array(attrs.fetch(:merged_from_ids, merged_from_ids)).map(&:to_i).reject(&:zero?).uniq.sort
       if attrs.key?(:pinned)
         self.pinned = !!attrs[:pinned]
         self.pinned_at = pinned? ? (attrs.fetch(:pinned_at, pinned_at) || Time.now.utc.iso8601) : nil
@@ -276,6 +285,10 @@ module Helpdesk
       !!archived
     end
 
+    def merged?
+      !merged_into_id.nil?
+    end
+
     def valid_for_type?
       validation_errors.empty?
     end
@@ -357,6 +370,8 @@ module Helpdesk
         "attachments" => attachments,
         "custom_fields" => custom_fields,
         "ticket_type" => ticket_type,
+        "merged_into_id" => merged_into_id,
+        "merged_from_ids" => merged_from_ids,
         "pinned" => pinned?,
         "pinned_at" => pinned_at,
         "archived" => archived?,
@@ -448,6 +463,24 @@ module Helpdesk
 
         normalized[key] = val.to_s
       end
+    end
+
+    def merge_into!(target_id)
+      self.merged_into_id = target_id.to_i
+      self.archived = true
+      self.archived_at = Time.now.utc.iso8601
+      self.status = "closed"
+      self.closed_at = Time.now.utc.iso8601
+      self.updated_at = Time.now.utc.iso8601
+      self
+    end
+
+    def add_merged_from(source_id)
+      source_id = source_id.to_i
+      return if source_id.zero?
+
+      self.merged_from_ids = (merged_from_ids + [source_id]).uniq.sort
+      self.updated_at = Time.now.utc.iso8601
     end
 
     def normalize_ticket_type(value)

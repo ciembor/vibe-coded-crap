@@ -123,6 +123,62 @@ module Helpdesk
       ticket
     end
 
+    def merge(source_id, target_id)
+      source_id = source_id.to_i
+      target_id = target_id.to_i
+      raise ArgumentError, "merge requires two ticket IDs" if source_id.zero? || target_id.zero?
+      raise ArgumentError, "cannot merge a ticket into itself" if source_id == target_id
+
+      tickets = load_data
+      source_index = tickets.index { |row| row["id"].to_i == source_id }
+      target_index = tickets.index { |row| row["id"].to_i == target_id }
+      return nil unless source_index && target_index
+
+      source = Ticket.from_h(tickets[source_index])
+      target = Ticket.from_h(tickets[target_index])
+
+      source.comments.each do |comment|
+        target.add_comment(
+          body: "[Merged from ##{source.id}] #{comment["body"]}",
+          author: comment["author"]
+        )
+      end
+
+      source.internal_notes.each do |note|
+        target.add_internal_note(
+          body: "[Merged from ##{source.id}] #{note["body"]}",
+          author: note["author"]
+        )
+      end
+
+      source.attachments.each do |attachment|
+        target.add_attachment(
+          name: "[Merged from ##{source.id}] #{attachment["name"]}",
+          content_type: attachment["content_type"],
+          size: attachment["size"],
+          description: attachment["description"],
+          uploaded_by: attachment["uploaded_by"]
+        )
+      end
+
+      source.tags.each { |tag| target.add_tag(tag) }
+      source.watchers.each { |watcher_id| target.add_watcher(watcher_id) }
+
+      source.custom_fields.each do |key, value|
+        target.custom_fields[key] = value if target.custom_fields[key].to_s.strip.empty?
+      end
+
+      target.send(:add_merged_from, source.id)
+      source.send(:merge_into!, target.id)
+      source.description = [source.description, "Merged into ticket ##{target.id}."].reject(&:empty?).join("\n\n")
+      source.custom_fields = source.custom_fields.merge("merged_into" => target.id.to_s)
+
+      tickets[target_index] = target.to_h
+      tickets[source_index] = source.to_h
+      save!(tickets)
+      { source: source, target: target }
+    end
+
     def import_json(path)
       rows = JSON.parse(File.read(path))
       unless rows.is_a?(Array)

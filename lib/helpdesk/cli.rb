@@ -38,6 +38,7 @@ module Helpdesk
         when "edit" then edit_ticket(args)
         when "delete" then delete_ticket(args)
         when "close" then close_tickets(args)
+        when "merge" then merge_tickets(args)
         when "status" then change_status(args)
         when "comment" then add_comment(args)
         when "note" then add_note(args)
@@ -95,6 +96,7 @@ module Helpdesk
           edit ID
           delete ID
           close ID [ID ...]
+          merge SOURCE_ID TARGET_ID
           status ID STATUS
           comment ID TEXT
           note ID TEXT
@@ -193,6 +195,8 @@ module Helpdesk
       puts "Pinned at: #{ticket.pinned_at || 'none'}" if visibility[:pinned]
       puts "Archived: #{ticket.archived? ? 'yes' : 'no'}" if visibility[:archived]
       puts "Archived at: #{ticket.archived_at || 'none'}" if visibility[:archived]
+      puts "Merged into: ##{ticket.merged_into_id}" if ticket.merged?
+      puts "Merged from: #{ticket.merged_from_ids.map { |id| "##{id}" }.join(", ")}" unless ticket.merged_from_ids.empty?
       puts "Created: #{ticket.created_at}"
       puts "Updated: #{ticket.updated_at}"
       puts "Description:"
@@ -383,6 +387,28 @@ module Helpdesk
         closed_ids.each { |ticket_id| log_action("ticket.close", "ticket ##{ticket_id}") }
         puts "Closed tickets: #{closed_ids.map { |id| "##{id}" }.join(", ")}"
       end
+    end
+
+    def merge_tickets(args)
+      return unless require_permission!(:ticket_write)
+
+      source_id = args[0]
+      target_id = args[1]
+      if source_id.to_s.strip.empty? || target_id.to_s.strip.empty?
+        puts "Usage: merge SOURCE_ID TARGET_ID"
+        return
+      end
+
+      result = @store.merge(source_id, target_id)
+      unless result
+        puts "Ticket not found."
+        return
+      end
+
+      log_action("ticket.merge", "ticket ##{source_id} -> ##{target_id}", source: source_id.to_i, target: target_id.to_i)
+      puts "Merged ticket ##{source_id} into ##{target_id}."
+    rescue ArgumentError => e
+      puts e.message
     end
 
     def change_status(args)
@@ -1387,7 +1413,9 @@ module Helpdesk
       overdue_marker = ticket.overdue? ? " overdue" : ""
       pinned_marker = ticket.pinned? ? " pinned" : ""
       archived_marker = ticket.archived? ? " archived" : ""
-      "##{ticket.id} [#{ticket.ticket_type}/#{ticket.status}/#{ticket.priority}#{overdue_marker}#{pinned_marker}#{archived_marker}] #{ticket.title}#{ticket.tags.empty? ? '' : " ##{ticket.tags.join(' #')}"}"
+      merged_marker = ticket.merged? ? " merged" : ""
+      merged_from_marker = ticket.merged_from_ids.empty? ? "" : " merged_from:#{ticket.merged_from_ids.join(',')}"
+      "##{ticket.id} [#{ticket.ticket_type}/#{ticket.status}/#{ticket.priority}#{overdue_marker}#{pinned_marker}#{archived_marker}#{merged_marker}#{merged_from_marker}] #{ticket.title}#{ticket.tags.empty? ? '' : " ##{ticket.tags.join(' #')}"}"
     end
 
     def format_filter_options(options)
@@ -1754,6 +1782,8 @@ module Helpdesk
           "added attachment to #{subject}"
         when "ticket.attach_remove"
           "removed attachment from #{subject}"
+        when "ticket.merge"
+          "merged #{subject}"
         when "ticket.archive"
           "archived #{subject}"
         when "ticket.unarchive"
