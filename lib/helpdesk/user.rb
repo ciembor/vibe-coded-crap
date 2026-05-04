@@ -66,6 +66,18 @@ module Helpdesk
       preferences.map { |key, value| "#{key}=#{value}" }.join(", ")
     end
 
+    def email_notifications_enabled?
+      preference_enabled?("email")
+    end
+
+    def preference_enabled?(key)
+      preferences = notification_preferences || {}
+      value = preferences[key.to_s]
+      return true if value.nil?
+
+      value == true || %w[true yes on 1].include?(value.to_s.strip.downcase)
+    end
+
     def to_h
       {
         "id" => id,

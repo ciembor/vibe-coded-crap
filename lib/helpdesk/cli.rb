@@ -104,6 +104,7 @@ module Helpdesk
           user role ID ROLE
           notify show
           notify set KEY VALUE
+          notify email ID [BODY]
           whoami
           audit [--last N] [--action ACTION] [--actor NAME] [--subject TEXT]
           exit
@@ -279,6 +280,7 @@ module Helpdesk
       body = prompt("Comment") if body.strip.empty?
       ticket.add_comment(body: body, author: prompt("Author", current_user_name))
       @store.save_ticket(ticket)
+      send_email_notifications(ticket, subject: "Comment added to ticket ##{ticket.id}", body: body)
       log_action("ticket.comment", "ticket ##{id}", author: current_user_name)
       puts "Added comment to ticket ##{id}."
     end
@@ -586,8 +588,18 @@ module Helpdesk
         return puts "Usage: notify set KEY VALUE" if key.to_s.strip.empty? || value.to_s.strip.empty?
 
         update_notification_preferences(key, value)
+      when "email"
+        return unless require_permission!(:ticket_write)
+
+        id = required_id(args.drop(1))
+        ticket = @store.find(id)
+        return puts "Ticket not found." unless ticket
+
+        body = args.drop(2).join(" ")
+        body = "Ticket ##{ticket.id}: #{ticket.title}" if body.strip.empty?
+        send_email_notifications(ticket, subject: "Ticket ##{ticket.id}", body: body)
       else
-        puts "Usage: notify show | notify set KEY VALUE"
+        puts "Usage: notify show | notify set KEY VALUE | notify email ID [BODY]"
       end
     rescue ArgumentError => e
       puts e.message
@@ -777,6 +789,31 @@ module Helpdesk
       end
       log_action("user.notification_preferences", "user ##{@current_user.id}", notification_preferences: prefs)
       puts "Updated notification preference #{key} to #{prefs[key.to_s]}."
+    end
+
+    def send_email_notifications(ticket, subject:, body:)
+      recipients = email_recipients(ticket)
+      if recipients.empty?
+        puts "No email recipients for ticket ##{ticket.id}."
+        return
+      end
+
+      recipients.each do |user|
+        puts "[email mock] To: #{user.display_name}"
+        puts "[email mock] Subject: #{subject}"
+        puts "[email mock] Body: #{body}"
+      end
+      log_action("notification.email", "ticket ##{ticket.id}", recipients: recipients.map(&:display_name), subject: subject)
+    end
+
+    def email_recipients(ticket)
+      watcher_ids = ticket.watchers || []
+      users = watcher_ids.map { |watcher_id| @users.find(watcher_id) }.compact
+      users.select do |user|
+        user.email.to_s.strip != "" &&
+          user.email_notifications_enabled? &&
+          user.preference_enabled?("watchers")
+      end
     end
 
     def parse_boolean(value)
