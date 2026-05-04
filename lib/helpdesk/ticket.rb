@@ -94,7 +94,7 @@ module Helpdesk
       end
     end
 
-    attr_accessor :id, :title, :description, :status, :priority, :tags, :comments, :internal_notes, :watchers, :attachments, :custom_fields, :ticket_type, :merged_into_id, :merged_from_ids, :pinned, :pinned_at, :archived, :archived_at, :created_at, :updated_at, :closed_at, :due_at, :reminder_at, :reminder_repeat
+    attr_accessor :id, :title, :description, :status, :priority, :tags, :comments, :internal_notes, :watchers, :attachments, :custom_fields, :ticket_type, :merged_into_id, :merged_from_ids, :related_ids, :pinned, :pinned_at, :archived, :archived_at, :created_at, :updated_at, :closed_at, :due_at, :reminder_at, :reminder_repeat
 
     def self.from_h(hash)
       ticket = new(
@@ -112,6 +112,7 @@ module Helpdesk
         ticket_type: hash["ticket_type"],
         merged_into_id: hash["merged_into_id"],
         merged_from_ids: hash["merged_from_ids"] || [],
+        related_ids: hash["related_ids"] || [],
         pinned: hash["pinned"],
         pinned_at: hash["pinned_at"],
         archived: hash["archived"],
@@ -127,7 +128,7 @@ module Helpdesk
       ticket
     end
 
-    def initialize(id: nil, title: "", description: "", status: "open", priority: "medium", tags: [], comments: [], internal_notes: [], watchers: [], attachments: [], custom_fields: {}, ticket_type: "general", merged_into_id: nil, merged_from_ids: [], pinned: false, pinned_at: nil, archived: false, archived_at: nil, created_at: nil, updated_at: nil, closed_at: nil, due_at: nil, reminder_at: nil, reminder_repeat: nil)
+    def initialize(id: nil, title: "", description: "", status: "open", priority: "medium", tags: [], comments: [], internal_notes: [], watchers: [], attachments: [], custom_fields: {}, ticket_type: "general", merged_into_id: nil, merged_from_ids: [], related_ids: [], pinned: false, pinned_at: nil, archived: false, archived_at: nil, created_at: nil, updated_at: nil, closed_at: nil, due_at: nil, reminder_at: nil, reminder_repeat: nil)
       @id = id
       @title = title
       @description = description
@@ -142,6 +143,7 @@ module Helpdesk
       @ticket_type = ticket_type
       @merged_into_id = merged_into_id
       @merged_from_ids = merged_from_ids
+      @related_ids = related_ids
       @pinned = pinned
       @pinned_at = pinned_at
       @archived = archived
@@ -164,6 +166,7 @@ module Helpdesk
       self.ticket_type = normalize_ticket_type(ticket_type)
       self.merged_into_id = merged_into_id.to_i.zero? ? nil : merged_into_id.to_i
       self.merged_from_ids = Array(merged_from_ids).map(&:to_i).reject(&:zero?).uniq.sort
+      self.related_ids = Array(related_ids).map(&:to_i).reject(&:zero?).uniq.sort
       self.comments = Array(comments).map do |comment|
         {
           "id" => comment["id"] || comment[:id],
@@ -228,6 +231,7 @@ module Helpdesk
       self.merged_into_id = attrs.key?(:merged_into_id) ? attrs[:merged_into_id].to_i : merged_into_id.to_i
       self.merged_into_id = nil if self.merged_into_id.zero?
       self.merged_from_ids = Array(attrs.fetch(:merged_from_ids, merged_from_ids)).map(&:to_i).reject(&:zero?).uniq.sort
+      self.related_ids = Array(attrs.fetch(:related_ids, related_ids)).map(&:to_i).reject(&:zero?).uniq.sort
       if attrs.key?(:pinned)
         self.pinned = !!attrs[:pinned]
         self.pinned_at = pinned? ? (attrs.fetch(:pinned_at, pinned_at) || Time.now.utc.iso8601) : nil
@@ -375,6 +379,10 @@ module Helpdesk
 
     def merged?
       !merged_into_id.nil?
+    end
+
+    def related?
+      related_ids.any?
     end
 
     def duplicate_key
@@ -545,6 +553,7 @@ module Helpdesk
         "ticket_type" => ticket_type,
         "merged_into_id" => merged_into_id,
         "merged_from_ids" => merged_from_ids,
+        "related_ids" => related_ids,
         "pinned" => pinned?,
         "pinned_at" => pinned_at,
         "archived" => archived?,
@@ -653,6 +662,20 @@ module Helpdesk
       return if source_id.zero?
 
       self.merged_from_ids = (merged_from_ids + [source_id]).uniq.sort
+      self.updated_at = Time.now.utc.iso8601
+    end
+
+    def relate_to(ticket_id)
+      ticket_id = ticket_id.to_i
+      return if ticket_id.zero? || ticket_id == id.to_i
+
+      self.related_ids = (related_ids + [ticket_id]).uniq.sort
+      self.updated_at = Time.now.utc.iso8601
+    end
+
+    def unrelate(ticket_id)
+      ticket_id = ticket_id.to_i
+      self.related_ids = related_ids.reject { |existing_id| existing_id.to_i == ticket_id }
       self.updated_at = Time.now.utc.iso8601
     end
 

@@ -48,6 +48,7 @@ module Helpdesk
         when "close" then close_tickets(args)
         when "undo" then undo(args)
         when "merge" then merge_tickets(args)
+        when "relate" then manage_relationships(args)
         when "status" then change_status(args)
         when "comment" then add_comment(args)
         when "note" then add_note(args)
@@ -115,6 +116,9 @@ module Helpdesk
           close ID [ID ...]
           undo
           merge SOURCE_ID TARGET_ID
+          relate add SOURCE_ID TARGET_ID
+          relate remove SOURCE_ID TARGET_ID
+          relate list ID
           status ID STATUS
           comment ID TEXT
           note ID TEXT
@@ -234,6 +238,7 @@ module Helpdesk
       puts "Archived at: #{ticket.archived_at || 'none'}" if visibility[:archived]
       puts "Merged into: ##{ticket.merged_into_id}" if ticket.merged?
       puts "Merged from: #{ticket.merged_from_ids.map { |id| "##{id}" }.join(", ")}" unless ticket.merged_from_ids.empty?
+      show_related_tickets(ticket)
       puts "Created: #{ticket.created_at}"
       puts "Updated: #{ticket.updated_at}"
       puts "Description:"
@@ -463,6 +468,61 @@ module Helpdesk
 
       log_action("ticket.merge", "ticket ##{source_id} -> ##{target_id}", source: source_id.to_i, target: target_id.to_i)
       puts "Merged ticket ##{source_id} into ##{target_id}."
+    rescue ArgumentError => e
+      puts e.message
+    end
+
+    def manage_relationships(args)
+      return unless require_permission!(:ticket_write)
+
+      action = args[0]
+      case action
+      when "add"
+        source_id = args[1]
+        target_id = args[2]
+        if source_id.to_s.strip.empty? || target_id.to_s.strip.empty?
+          puts "Usage: relate add SOURCE_ID TARGET_ID"
+          return
+        end
+
+        result = @store.relate(source_id, target_id)
+        unless result
+          puts "Ticket not found."
+          return
+        end
+
+        log_action("ticket.relate", "ticket ##{source_id} <-> ##{target_id}", source: source_id.to_i, target: target_id.to_i)
+        puts "Related ticket ##{source_id} with ##{target_id}."
+      when "remove"
+        source_id = args[1]
+        target_id = args[2]
+        if source_id.to_s.strip.empty? || target_id.to_s.strip.empty?
+          puts "Usage: relate remove SOURCE_ID TARGET_ID"
+          return
+        end
+
+        result = @store.unrelate(source_id, target_id)
+        unless result
+          puts "Ticket not found."
+          return
+        end
+
+        log_action("ticket.unrelate", "ticket ##{source_id} <-> ##{target_id}", source: source_id.to_i, target: target_id.to_i)
+        puts "Removed relationship between ticket ##{source_id} and ##{target_id}."
+      when "list"
+        id = required_id(args.drop(1))
+        ticket = @store.find(id)
+        return puts "Ticket not found." unless ticket
+
+        related = @store.related_tickets(ticket)
+        if related.empty?
+          puts "No related tickets."
+        else
+          related.each { |related_ticket| puts format_ticket_row(related_ticket) }
+        end
+      else
+        puts "Usage: relate add SOURCE_ID TARGET_ID | relate remove SOURCE_ID TARGET_ID | relate list ID"
+      end
     rescue ArgumentError => e
       puts e.message
     end
@@ -1903,6 +1963,18 @@ module Helpdesk
       end
     end
 
+    def show_related_tickets(ticket)
+      related = @store.related_tickets(ticket)
+      puts "Related tickets:"
+      if related.empty?
+        puts "  none"
+      else
+        related.each do |related_ticket|
+          puts "  #{format_ticket_row(related_ticket)}"
+        end
+      end
+    end
+
     def show_sla_rules
       rules = @sla_rules.all
       rules.each do |priority, rule|
@@ -2511,6 +2583,10 @@ module Helpdesk
           "removed attachment from #{subject}"
         when "ticket.merge"
           "merged #{subject}"
+        when "ticket.relate"
+          "related #{subject}"
+        when "ticket.unrelate"
+          "removed relationship for #{subject}"
         when "ticket.archive"
           "archived #{subject}"
         when "ticket.unarchive"

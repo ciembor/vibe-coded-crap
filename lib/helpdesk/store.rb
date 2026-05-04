@@ -34,6 +34,54 @@ module Helpdesk
       matches.sort_by { |existing| [existing.status == "closed" ? 1 : 0, existing.updated_at.to_s] }.take(limit)
     end
 
+    def related_tickets(ticket)
+      all.select { |existing| ticket.related_ids.include?(existing.id.to_i) }
+    end
+
+    def relate(source_id, target_id)
+      source_id = source_id.to_i
+      target_id = target_id.to_i
+      raise ArgumentError, "relate requires two ticket IDs" if source_id.zero? || target_id.zero?
+      raise ArgumentError, "cannot relate a ticket to itself" if source_id == target_id
+
+      tickets = load_data
+      source_index = tickets.index { |row| row["id"].to_i == source_id }
+      target_index = tickets.index { |row| row["id"].to_i == target_id }
+      return nil unless source_index && target_index
+
+      source = Ticket.from_h(tickets[source_index])
+      target = Ticket.from_h(tickets[target_index])
+      source.send(:relate_to, target.id)
+      target.send(:relate_to, source.id)
+
+      tickets[source_index] = source.to_h
+      tickets[target_index] = target.to_h
+      save!(tickets)
+      { source: source, target: target }
+    end
+
+    def unrelate(source_id, target_id)
+      source_id = source_id.to_i
+      target_id = target_id.to_i
+      raise ArgumentError, "unrelate requires two ticket IDs" if source_id.zero? || target_id.zero?
+      raise ArgumentError, "cannot unrelate a ticket from itself" if source_id == target_id
+
+      tickets = load_data
+      source_index = tickets.index { |row| row["id"].to_i == source_id }
+      target_index = tickets.index { |row| row["id"].to_i == target_id }
+      return nil unless source_index && target_index
+
+      source = Ticket.from_h(tickets[source_index])
+      target = Ticket.from_h(tickets[target_index])
+      source.send(:unrelate, target.id)
+      target.send(:unrelate, source.id)
+
+      tickets[source_index] = source.to_h
+      tickets[target_index] = target.to_h
+      save!(tickets)
+      { source: source, target: target }
+    end
+
     def find(id)
       all.find { |ticket| ticket.id.to_i == id.to_i }
     end
