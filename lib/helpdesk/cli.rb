@@ -72,8 +72,8 @@ module Helpdesk
           close ID [ID ...]
           status ID STATUS
           comment ID TEXT
-          tag add ID TAG
-          tag remove ID TAG
+          tag add ID [ID ...] TAG
+          tag remove ID [ID ...] TAG
           search QUERY
           dashboard
           stats
@@ -223,22 +223,24 @@ module Helpdesk
 
     def manage_tags(args)
       action = args[0]
-      id = args[1]
-      tag = args[2]
-      ticket = @store.find(id)
-      return puts "Ticket not found." unless ticket
-
       case action
-      when "add"
-        ticket.add_tag(tag)
-        @store.save_ticket(ticket)
-        puts "Added tag to ticket ##{id}."
-      when "remove"
-        ticket.remove_tag(tag)
-        @store.save_ticket(ticket)
-        puts "Removed tag from ticket ##{id}."
+      when "add", "remove"
+        tag = args.pop
+        ids = args.drop(1)
+        if ids.empty? || tag.to_s.strip.empty?
+          puts "Usage: tag add|remove ID [ID ...] TAG"
+          return
+        end
+
+        touched_ids = @store.bulk_tag(ids, tag, action: action)
+        if touched_ids.empty?
+          puts "No matching tickets found."
+        else
+          verb = action == "add" ? "Added" : "Removed"
+          puts "#{verb} tag for tickets: #{touched_ids.map { |id| "##{id}" }.join(", ")}"
+        end
       else
-        puts "Usage: tag add|remove ID TAG"
+        puts "Usage: tag add|remove ID [ID ...] TAG"
       end
     end
 

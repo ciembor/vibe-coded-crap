@@ -76,6 +76,34 @@ module Helpdesk
       closed_ids
     end
 
+    def bulk_tag(ids, tag, action:)
+      id_list = Array(ids).map(&:to_i).uniq
+      tag = tag.to_s.strip
+      return [] if id_list.empty? || tag.empty?
+
+      tickets = load_data
+      touched_ids = []
+
+      tickets.each do |row|
+        next unless id_list.include?(row["id"].to_i)
+
+        ticket = Ticket.from_h(row)
+        case action
+        when "add"
+          ticket.add_tag(tag)
+        when "remove"
+          ticket.remove_tag(tag)
+        else
+          raise ArgumentError, "invalid bulk tag action: #{action}"
+        end
+        row.replace(ticket.to_h)
+        touched_ids << ticket.id
+      end
+
+      save!(tickets)
+      touched_ids
+    end
+
     def save_ticket(ticket)
       tickets = load_data
       index = tickets.index { |row| row["id"].to_i == ticket.id.to_i }
