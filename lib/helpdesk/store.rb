@@ -30,7 +30,8 @@ module Helpdesk
         priority: attrs.fetch(:priority, "medium"),
         tags: attrs.fetch(:tags, []),
         due_at: attrs.fetch(:due_at, nil),
-        reminder_at: attrs.fetch(:reminder_at, nil)
+        reminder_at: attrs.fetch(:reminder_at, nil),
+        reminder_repeat: attrs.fetch(:reminder_repeat, nil)
       ).normalize!
       tickets << ticket.to_h
       save!(tickets)

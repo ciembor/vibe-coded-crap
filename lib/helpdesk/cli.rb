@@ -56,6 +56,8 @@ module Helpdesk
           reminders
           remind set ID TIMESTAMP
           remind clear ID
+          remind repeat ID INTERVAL
+          remind repeat clear ID
           show ID
           new
           edit ID
@@ -97,6 +99,7 @@ module Helpdesk
       puts "Due: #{ticket.due_at || 'none'}"
       puts "Overdue: #{ticket.overdue? ? 'yes' : 'no'}"
       puts "Reminder: #{ticket.reminder_at || 'none'}"
+      puts "Reminder repeat: #{ticket.reminder_repeat || 'none'}"
       puts "Reminder due: #{ticket.reminder_due? ? 'yes' : 'no'}"
       puts "Tags: #{ticket.tags.join(", ")}"
       puts "Created: #{ticket.created_at}"
@@ -120,6 +123,7 @@ module Helpdesk
       priority = prompt("Priority", "medium")
       due_at = prompt("Due date (YYYY-MM-DD)", "")
       reminder_at = prompt("Reminder time (YYYY-MM-DD HH:MM, optional)", "")
+      reminder_repeat = prompt("Reminder repeat (daily, weekly, monthly, optional)", "")
       tags = prompt("Tags (comma separated)", "").split(",").map(&:strip).reject(&:empty?)
       ticket = @store.create(
         title: title,
@@ -128,6 +132,7 @@ module Helpdesk
         priority: priority,
         due_at: due_at,
         reminder_at: reminder_at,
+        reminder_repeat: reminder_repeat,
         tags: tags
       )
       puts "Created ticket ##{ticket.id}."
@@ -147,6 +152,7 @@ module Helpdesk
       attrs[:priority] = prompt("Priority", ticket.priority)
       attrs[:due_at] = prompt("Due date (YYYY-MM-DD)", ticket.due_at || "")
       attrs[:reminder_at] = prompt("Reminder time (YYYY-MM-DD HH:MM, optional)", ticket.reminder_at || "")
+      attrs[:reminder_repeat] = prompt("Reminder repeat (daily, weekly, monthly, optional)", ticket.reminder_repeat || "")
       attrs[:tags] = prompt("Tags (comma separated)", ticket.tags.join(", ")).split(",").map(&:strip).reject(&:empty?)
       @store.update(id, attrs)
       puts "Updated ticket ##{id}."
@@ -322,6 +328,10 @@ module Helpdesk
 
       tickets.each do |ticket|
         puts "##{ticket.id} #{ticket.title} [reminder #{ticket.reminder_at}]"
+        next unless ticket.recurring_reminder?
+
+        ticket.advance_reminder!
+        @store.save_ticket(ticket)
       end
     end
 
@@ -342,8 +352,21 @@ module Helpdesk
         ticket.update(reminder_at: nil)
         @store.save_ticket(ticket)
         puts "Reminder cleared for ticket ##{id}."
+      when "repeat"
+        repeat = args[2]
+        if repeat == "clear"
+          ticket.update(reminder_repeat: nil)
+          @store.save_ticket(ticket)
+          puts "Reminder repeat cleared for ticket ##{id}."
+        else
+          repeat = args.drop(2).join(" ")
+          repeat = prompt("Reminder repeat (daily, weekly, monthly)") if repeat.strip.empty?
+          ticket.update(reminder_repeat: repeat)
+          @store.save_ticket(ticket)
+          puts "Reminder repeat set for ticket ##{id}."
+        end
       else
-        puts "Usage: remind set ID TIMESTAMP | remind clear ID"
+        puts "Usage: remind set ID TIMESTAMP | remind clear ID | remind repeat ID INTERVAL | remind repeat clear ID"
       end
     rescue ArgumentError => e
       puts e.message
