@@ -4,7 +4,7 @@ module Helpdesk
   class User
     ROLES = %w[admin agent viewer].freeze
 
-    attr_accessor :id, :name, :email, :role, :notification_preferences, :notification_suppression_rules, :saved_searches, :created_at, :updated_at
+    attr_accessor :id, :name, :email, :role, :notification_preferences, :notification_suppression_rules, :saved_searches, :favorite_filters, :created_at, :updated_at
 
     def self.from_h(hash)
       new(
@@ -15,12 +15,13 @@ module Helpdesk
         notification_preferences: hash["notification_preferences"] || {},
         notification_suppression_rules: hash["notification_suppression_rules"] || [],
         saved_searches: hash["saved_searches"] || [],
+        favorite_filters: hash["favorite_filters"] || [],
         created_at: hash["created_at"],
         updated_at: hash["updated_at"]
       ).normalize!
     end
 
-    def initialize(id: nil, name: "", email: "", role: "agent", notification_preferences: {}, notification_suppression_rules: [], saved_searches: [], created_at: nil, updated_at: nil)
+    def initialize(id: nil, name: "", email: "", role: "agent", notification_preferences: {}, notification_suppression_rules: [], saved_searches: [], favorite_filters: [], created_at: nil, updated_at: nil)
       @id = id
       @name = name
       @email = email
@@ -28,6 +29,7 @@ module Helpdesk
       @notification_preferences = notification_preferences
       @notification_suppression_rules = notification_suppression_rules
       @saved_searches = saved_searches
+      @favorite_filters = favorite_filters
       @created_at = created_at
       @updated_at = updated_at
     end
@@ -41,6 +43,7 @@ module Helpdesk
       self.notification_preferences = normalize_notification_preferences(notification_preferences)
       self.notification_suppression_rules = normalize_suppression_rules(notification_suppression_rules)
       self.saved_searches = normalize_saved_searches(saved_searches)
+      self.favorite_filters = normalize_favorite_filters(favorite_filters)
       self.created_at ||= Time.now.utc.iso8601
       self.updated_at ||= created_at
       self
@@ -60,6 +63,9 @@ module Helpdesk
       )
       self.saved_searches = normalize_saved_searches(
         attrs.fetch(:saved_searches, saved_searches)
+      )
+      self.favorite_filters = normalize_favorite_filters(
+        attrs.fetch(:favorite_filters, favorite_filters)
       )
       self.updated_at = Time.now.utc.iso8601
       self
@@ -88,6 +94,11 @@ module Helpdesk
       searches.empty? ? "none" : "#{searches.count} saved"
     end
 
+    def favorite_filters_label
+      filters = favorite_filters || []
+      filters.empty? ? "none" : "#{filters.count} saved"
+    end
+
     def email_notifications_enabled?
       preference_enabled?("email")
     end
@@ -109,6 +120,7 @@ module Helpdesk
         "notification_preferences" => notification_preferences,
         "notification_suppression_rules" => notification_suppression_rules,
         "saved_searches" => saved_searches,
+        "favorite_filters" => favorite_filters,
         "created_at" => created_at,
         "updated_at" => updated_at
       }
@@ -165,6 +177,43 @@ module Helpdesk
           "updated_at" => search["updated_at"] || search[:updated_at] || Time.now.utc.iso8601
         }
       end.reject { |search| search["name"].to_s.strip.empty? || search["query"].to_s.strip.empty? }.uniq { |search| search["name"].to_s.downcase }.sort_by { |search| search["name"].to_s.downcase }
+    end
+
+    def normalize_favorite_filters(value)
+      Array(value).map do |filter|
+        {
+          "name" => filter["name"] || filter[:name] || "",
+          "options" => normalize_filter_options(filter["options"] || filter[:options] || {}),
+          "created_at" => filter["created_at"] || filter[:created_at] || Time.now.utc.iso8601,
+          "updated_at" => filter["updated_at"] || filter[:updated_at] || Time.now.utc.iso8601
+        }
+      end.reject { |filter| filter["name"].to_s.strip.empty? }.uniq { |filter| filter["name"].to_s.downcase }.sort_by { |filter| filter["name"].to_s.downcase }
+    end
+
+    def normalize_filter_options(value)
+      value = value.is_a?(Hash) ? value : {}
+      normalized = {}
+      normalized["status"] = fetch_option(value, "status").to_s.strip unless fetch_option(value, "status").to_s.strip.empty?
+      normalized["priority"] = fetch_option(value, "priority").to_s.strip unless fetch_option(value, "priority").to_s.strip.empty?
+      normalized["tag"] = fetch_option(value, "tag").to_s.strip unless fetch_option(value, "tag").to_s.strip.empty?
+      normalized["sort"] = fetch_option(value, "sort").to_s.strip unless fetch_option(value, "sort").to_s.strip.empty?
+      normalized["overdue"] = truthy?(fetch_option(value, "overdue"))
+      normalized["archived"] = truthy?(fetch_option(value, "archived"))
+      normalized["active"] = truthy?(fetch_option(value, "active"))
+      normalized.reject { |_key, val| val == false || val.nil? || val.to_s.strip.empty? }
+    end
+
+    def fetch_option(hash, key)
+      hash[key] || hash[key.to_sym] || hash[key.to_s]
+    end
+
+    def truthy?(value)
+      case value
+      when true then true
+      when false, nil then false
+      else
+        %w[true yes on 1].include?(value.to_s.strip.downcase)
+      end
     end
   end
 end

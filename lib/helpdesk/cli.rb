@@ -46,6 +46,8 @@ module Helpdesk
         when "tag" then manage_tags(args)
         when "search" then search(args)
         when "searches" then list_saved_searches
+        when "filter" then filter(args)
+        when "filters" then list_favorite_filters
         when "activity" then activity(args)
         when "overdue" then overdue
         when "remind" then remind(args)
@@ -111,6 +113,10 @@ module Helpdesk
           search run NAME
           search delete NAME
           searches
+          filter save NAME [list options]
+          filter run NAME
+          filter delete NAME
+          filters
           activity [--last N] [--ticket ID]
           dashboard
           stats
@@ -135,14 +141,7 @@ module Helpdesk
 
     def list(args)
       options = parse_options(args)
-      tickets = @store.all
-      tickets = tickets.select { |ticket| ticket.status == options[:status] } if options[:status]
-      tickets = tickets.select { |ticket| ticket.priority == options[:priority] } if options[:priority]
-      tickets = tickets.select { |ticket| ticket.tags.include?(options[:tag]) } if options[:tag]
-      tickets = tickets.select(&:overdue?) if options[:overdue]
-      tickets = tickets.select(&:archived?) if options[:archived]
-      tickets = tickets.reject(&:archived?) if options[:active]
-      tickets = sort_tickets(tickets, options[:sort])
+      tickets = filter_tickets(@store.all, options)
 
       if tickets.empty?
         puts "No tickets found."
@@ -150,6 +149,16 @@ module Helpdesk
       end
 
       tickets.each { |ticket| puts format_ticket_row(ticket) }
+    end
+
+    def filter_tickets(tickets, options)
+      tickets = tickets.select { |ticket| ticket.status == option_value(options, :status) } if option_value(options, :status)
+      tickets = tickets.select { |ticket| ticket.priority == option_value(options, :priority) } if option_value(options, :priority)
+      tickets = tickets.select { |ticket| ticket.tags.include?(option_value(options, :tag)) } if option_value(options, :tag)
+      tickets = tickets.select(&:overdue?) if truthy_option?(options, :overdue)
+      tickets = tickets.select(&:archived?) if truthy_option?(options, :archived)
+      tickets = tickets.reject(&:archived?) if truthy_option?(options, :active)
+      sort_tickets(tickets, option_value(options, :sort))
     end
 
     def show(args)
@@ -590,6 +599,18 @@ module Helpdesk
       end
     end
 
+    def list_favorite_filters
+      filters = @current_user.favorite_filters || []
+      if filters.empty?
+        puts "No favorite filters."
+        return
+      end
+
+      filters.each do |filter|
+        puts "#{filter["name"]}: #{format_filter_options(filter["options"])}"
+      end
+    end
+
     def save_search(args)
       name = args[0].to_s.strip
       query = args.drop(1).join(" ").strip
@@ -615,6 +636,99 @@ module Helpdesk
       persist_saved_searches(searches)
       log_action("user.saved_searches", "user ##{@current_user.id}", saved_searches: searches.map { |search| search["name"] })
       puts "Saved search #{name}."
+    end
+
+    def filter(args)
+      action = args[0]
+      case action
+      when "save"
+        save_favorite_filter(args.drop(1))
+      when "run"
+        run_favorite_filter(args.drop(1))
+      when "delete"
+        delete_favorite_filter(args.drop(1))
+      else
+        puts "Usage: filter save NAME [list options] | filter run NAME | filter delete NAME"
+      end
+    end
+
+    def save_favorite_filter(args)
+      name = args[0].to_s.strip
+      option_args = args.drop(1)
+      if name.empty? || option_args.empty?
+        puts "Usage: filter save NAME [list options]"
+        return
+      end
+
+      options = parse_options(option_args)
+      filters = (@current_user.favorite_filters || []).dup
+      existing = filters.index { |filter| filter["name"].to_s.casecmp?(name) }
+      payload = {
+        "name" => name,
+        "options" => options,
+        "created_at" => existing ? filters[existing]["created_at"] : Time.now.utc.iso8601,
+        "updated_at" => Time.now.utc.iso8601
+      }
+      if existing
+        filters[existing] = payload
+      else
+        filters << payload
+      end
+
+      persist_favorite_filters(filters)
+      log_action("user.favorite_filters", "user ##{@current_user.id}", favorite_filters: filters.map { |filter| filter["name"] })
+      puts "Saved favorite filter #{name}."
+    end
+
+    def run_favorite_filter(args)
+      name = args[0].to_s.strip
+      if name.empty?
+        puts "Usage: filter run NAME"
+        return
+      end
+
+      filter = (@current_user.favorite_filters || []).find { |entry| entry["name"].to_s.casecmp?(name) }
+      unless filter
+        puts "Favorite filter not found."
+        return
+      end
+
+      tickets = filter_tickets(@store.all, filter["options"] || {})
+      if tickets.empty?
+        puts "No tickets found."
+      else
+        tickets.each { |ticket| puts format_ticket_row(ticket) }
+      end
+    end
+
+    def delete_favorite_filter(args)
+      name = args[0].to_s.strip
+      if name.empty?
+        puts "Usage: filter delete NAME"
+        return
+      end
+
+      filters = (@current_user.favorite_filters || []).dup
+      before = filters.length
+      filters.reject! { |filter| filter["name"].to_s.casecmp?(name) }
+      if filters.length == before
+        puts "Favorite filter not found."
+        return
+      end
+
+      persist_favorite_filters(filters)
+      log_action("user.favorite_filters", "user ##{@current_user.id}", favorite_filters: filters.map { |filter| filter["name"] })
+      puts "Deleted favorite filter #{name}."
+    end
+
+    def persist_favorite_filters(filters)
+      updated_user = @users.update(@current_user.id, favorite_filters: filters)
+      if updated_user
+        @current_user = updated_user
+      else
+        @current_user.favorite_filters = filters
+        @users.save_user(@current_user)
+      end
     end
 
     def run_saved_search(args)
@@ -863,6 +977,7 @@ module Helpdesk
         puts "Notification prefs: #{@current_user.notification_preferences_label}"
         puts "Suppression rules: #{@current_user.notification_suppression_rules_label}"
         puts "Saved searches: #{@current_user.saved_searches_label}"
+        puts "Favorite filters: #{@current_user.favorite_filters_label}"
       else
         puts "No current user."
       end
@@ -990,6 +1105,28 @@ module Helpdesk
       pinned_marker = ticket.pinned? ? " pinned" : ""
       archived_marker = ticket.archived? ? " archived" : ""
       "##{ticket.id} [#{ticket.status}/#{ticket.priority}#{overdue_marker}#{pinned_marker}#{archived_marker}] #{ticket.title}#{ticket.tags.empty? ? '' : " ##{ticket.tags.join(' #')}"}"
+    end
+
+    def format_filter_options(options)
+      options = options || {}
+      parts = []
+      parts << "--status #{option_value(options, :status)}" if option_value(options, :status)
+      parts << "--priority #{option_value(options, :priority)}" if option_value(options, :priority)
+      parts << "--tag #{option_value(options, :tag)}" if option_value(options, :tag)
+      parts << "--sort #{option_value(options, :sort)}" if option_value(options, :sort)
+      parts << "--overdue" if truthy_option?(options, :overdue)
+      parts << "--archived" if truthy_option?(options, :archived)
+      parts << "--active" if truthy_option?(options, :active)
+      parts.empty? ? "none" : parts.join(" ")
+    end
+
+    def option_value(options, key)
+      options[key] || options[key.to_s]
+    end
+
+    def truthy_option?(options, key)
+      value = option_value(options, key)
+      value == true || %w[true yes on 1].include?(value.to_s.strip.downcase)
     end
 
     def overdue
