@@ -4,6 +4,7 @@ require "csv"
 require "json"
 require "fileutils"
 require "helpdesk/audit_log"
+require "helpdesk/api_token_store"
 require "helpdesk/escalation_rule_store"
 require "helpdesk/store"
 require "helpdesk/sla_rule_store"
@@ -22,6 +23,7 @@ module Helpdesk
       @sort_rules = SortRuleStore.new
       @templates = TemplateStore.new
       @users = UserStore.new
+      @api_tokens = ApiTokenStore.new
       @webhooks = WebhookStore.new
       @escalation_rules.reload_ticket_rules!
       @sla_rules.reload_ticket_rules!
@@ -202,7 +204,10 @@ module Helpdesk
           notify email ID [BODY]
           whoami
           audit [--last N] [--action ACTION] [--actor NAME] [--subject TEXT]
-          api METHOD PATH [JSON_BODY]
+          api --token TOKEN METHOD PATH [JSON_BODY]
+          api tokens list
+          api tokens create NAME [USER_ID]
+          api tokens revoke ID
           webhooks
           webhook add NAME URL [EVENT ...]
           webhook remove ID
@@ -1732,13 +1737,38 @@ module Helpdesk
     end
 
     def api(args)
-      method = args[0].to_s.strip.upcase
-      path = args[1].to_s.strip
-      body = args.drop(2).join(" ")
-      if method.empty? || path.empty?
-        puts "Usage: api METHOD PATH [JSON_BODY]"
+      if args[0].to_s == "tokens"
+        manage_api_tokens(args.drop(1))
         return
       end
+
+      token_index = args.index("--token")
+      raw_token = token_index ? args[token_index + 1].to_s.strip : ""
+      if raw_token.empty?
+        puts api_json_response(401, error: "Missing API token.")
+        return
+      end
+
+      method_args = args.dup
+      method_args.slice!(token_index, 2) if token_index
+
+      method = method_args[0].to_s.strip.upcase
+      path = method_args[1].to_s.strip
+      body = method_args.drop(2).join(" ")
+      if method.empty? || path.empty?
+        puts "Usage: api --token TOKEN METHOD PATH [JSON_BODY]"
+        return
+      end
+
+      auth_token = @api_tokens.find_by_token(raw_token)
+      if auth_token.nil? || auth_token["enabled"] == false
+        puts api_json_response(401, error: "Invalid API token.")
+        return
+      end
+
+      previous_user = @current_user
+      @current_user = @users.find(auth_token["user_id"]) || previous_user
+      @api_tokens.touch!(raw_token)
 
       payload = parse_api_body(body)
       response =
@@ -1803,6 +1833,55 @@ module Helpdesk
       puts api_json_response(response[:status], response[:data] || {}, response[:error])
     rescue ArgumentError, JSON::ParserError => e
       puts api_json_response(400, error: e.message)
+    ensure
+      @current_user = previous_user if defined?(previous_user)
+    end
+
+    def manage_api_tokens(args)
+      action = args[0]
+      case action
+      when "list"
+        return unless require_permission!(:admin)
+
+        tokens = @api_tokens.all
+        if tokens.empty?
+          puts "No API tokens."
+          return
+        end
+
+        tokens.each do |token|
+          user = @users.find(token["user_id"])
+          puts "##{token["id"]} #{token["name"]} user=#{user ? user.display_name : "user ##{token["user_id"]}"} enabled=#{token["enabled"]} last_used=#{token["last_used_at"] || 'never'}"
+        end
+      when "create"
+        return unless require_permission!(:admin)
+
+        name = args[1]
+        user_id = args[2] || @current_user.id
+        if name.to_s.strip.empty?
+          puts "Usage: api tokens create NAME [USER_ID]"
+          return
+        end
+
+        token = @api_tokens.create(name: name, user_id: user_id, scopes: ["*"])
+        user = @users.find(token["user_id"])
+        puts "Created API token ##{token["id"]} for #{user ? user.display_name : "user ##{token["user_id"]}"}."
+        puts "Token: #{token["token"]}"
+      when "revoke"
+        return unless require_permission!(:admin)
+
+        id = required_id(args.drop(1))
+        token = @api_tokens.revoke(id)
+        if token
+          puts "Revoked API token ##{id}."
+        else
+          puts "API token not found."
+        end
+      else
+        puts "Usage: api tokens list | api tokens create NAME [USER_ID] | api tokens revoke ID"
+      end
+    rescue ArgumentError => e
+      puts e.message
     end
 
     def list_webhooks
