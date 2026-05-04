@@ -178,72 +178,30 @@ module Helpdesk
       ticket = @store.find(required_id(args))
       return puts "Ticket not found." unless ticket
 
+      visibility = field_visibility_for_role
       puts "##{ticket.id} #{ticket.title}"
       puts "Status: #{ticket.status}"
       puts "Priority: #{ticket.priority}"
-      puts "Type: #{ticket.ticket_type}"
+      puts "Type: #{ticket.ticket_type}" if visibility[:type]
       puts "Due: #{ticket.due_at || 'none'}"
       puts "Overdue: #{ticket.overdue? ? 'yes' : 'no'}"
       puts "Reminder: #{ticket.reminder_at || 'none'}"
       puts "Reminder repeat: #{ticket.reminder_repeat || 'none'}"
       puts "Reminder due: #{ticket.reminder_due? ? 'yes' : 'no'}"
       puts "Tags: #{ticket.tags.join(", ")}"
-      puts "Pinned: #{ticket.pinned? ? 'yes' : 'no'}"
-      puts "Pinned at: #{ticket.pinned_at || 'none'}"
-      puts "Archived: #{ticket.archived? ? 'yes' : 'no'}"
-      puts "Archived at: #{ticket.archived_at || 'none'}"
+      puts "Pinned: #{ticket.pinned? ? 'yes' : 'no'}" if visibility[:pinned]
+      puts "Pinned at: #{ticket.pinned_at || 'none'}" if visibility[:pinned]
+      puts "Archived: #{ticket.archived? ? 'yes' : 'no'}" if visibility[:archived]
+      puts "Archived at: #{ticket.archived_at || 'none'}" if visibility[:archived]
       puts "Created: #{ticket.created_at}"
       puts "Updated: #{ticket.updated_at}"
       puts "Description:"
       puts ticket.description
-      puts "Comments:"
-      if ticket.comments.empty?
-        puts "  none"
-      else
-        ticket.comments.each do |comment|
-          puts "  [#{comment["id"]}] #{comment["author"]} @ #{comment["created_at"]}: #{comment["body"]}"
-        end
-      end
-      puts "Internal notes:"
-      if ticket.internal_notes.empty?
-        puts "  none"
-      else
-        ticket.internal_notes.each do |note|
-          puts "  [#{note["id"]}] #{note["author"]} @ #{note["created_at"]}: #{note["body"]}"
-        end
-      end
-      puts "Watchers:"
-      if ticket.watchers.empty?
-        puts "  none"
-      else
-        ticket.watchers.each do |watcher_id|
-          user = @users.find(watcher_id)
-          label = user ? user.display_name : "user ##{watcher_id}"
-          puts "  - #{label}"
-        end
-      end
-      puts "Attachments:"
-      if ticket.attachments.empty?
-        puts "  none"
-      else
-        ticket.attachments.each do |attachment|
-          details = [
-            attachment["content_type"].to_s.empty? ? nil : attachment["content_type"],
-            attachment["size"].to_i.zero? ? nil : "#{attachment["size"]} bytes",
-            attachment["description"].to_s.empty? ? nil : attachment["description"]
-          ].compact.join(" | ")
-          details = " | #{details}" unless details.empty?
-          puts "  [#{attachment["id"]}] #{attachment["name"]}#{details} (by #{attachment["uploaded_by"]} @ #{attachment["created_at"]})"
-        end
-      end
-      puts "Custom fields:"
-      if ticket.custom_fields.empty?
-        puts "  none"
-      else
-        ticket.custom_fields.each do |key, value|
-          puts "  #{key}: #{value}"
-        end
-      end
+      show_comments(ticket, visibility)
+      show_internal_notes(ticket, visibility)
+      show_watchers(ticket, visibility)
+      show_attachments(ticket, visibility)
+      show_custom_fields(ticket, visibility)
       activity = activity_entries_for_ticket(ticket.id)
       puts "Activity:"
       if activity.empty?
@@ -297,6 +255,79 @@ module Helpdesk
       puts "Created ticket ##{ticket.id}."
     rescue ArgumentError => e
       puts e.message
+    end
+
+    def show_comments(ticket, visibility)
+      return unless visibility[:comments]
+
+      puts "Comments:"
+      if ticket.comments.empty?
+        puts "  none"
+      else
+        ticket.comments.each do |comment|
+          puts "  [#{comment["id"]}] #{comment["author"]} @ #{comment["created_at"]}: #{comment["body"]}"
+        end
+      end
+    end
+
+    def show_internal_notes(ticket, visibility)
+      return unless visibility[:internal_notes]
+
+      puts "Internal notes:"
+      if ticket.internal_notes.empty?
+        puts "  none"
+      else
+        ticket.internal_notes.each do |note|
+          puts "  [#{note["id"]}] #{note["author"]} @ #{note["created_at"]}: #{note["body"]}"
+        end
+      end
+    end
+
+    def show_watchers(ticket, visibility)
+      return unless visibility[:watchers]
+
+      puts "Watchers:"
+      if ticket.watchers.empty?
+        puts "  none"
+      else
+        ticket.watchers.each do |watcher_id|
+          user = @users.find(watcher_id)
+          label = user ? user.display_name : "user ##{watcher_id}"
+          puts "  - #{label}"
+        end
+      end
+    end
+
+    def show_attachments(ticket, visibility)
+      return unless visibility[:attachments]
+
+      puts "Attachments:"
+      if ticket.attachments.empty?
+        puts "  none"
+      else
+        ticket.attachments.each do |attachment|
+          details = [
+            attachment["content_type"].to_s.empty? ? nil : attachment["content_type"],
+            attachment["size"].to_i.zero? ? nil : "#{attachment["size"]} bytes",
+            attachment["description"].to_s.empty? ? nil : attachment["description"]
+          ].compact.join(" | ")
+          details = " | #{details}" unless details.empty?
+          puts "  [#{attachment["id"]}] #{attachment["name"]}#{details} (by #{attachment["uploaded_by"]} @ #{attachment["created_at"]})"
+        end
+      end
+    end
+
+    def show_custom_fields(ticket, visibility)
+      return unless visibility[:custom_fields]
+
+      puts "Custom fields:"
+      if ticket.custom_fields.empty?
+        puts "  none"
+      else
+        ticket.custom_fields.each do |key, value|
+          puts "  #{key}: #{value}"
+        end
+      end
     end
 
     def edit_ticket(args)
@@ -1370,6 +1401,34 @@ module Helpdesk
       parts << "--archived" if truthy_option?(options, :archived)
       parts << "--active" if truthy_option?(options, :active)
       parts.empty? ? "none" : parts.join(" ")
+    end
+
+    def field_visibility_for_role
+      role = @current_user&.role_label || "agent"
+      case role
+      when "viewer"
+        {
+          type: false,
+          pinned: false,
+          archived: false,
+          comments: true,
+          internal_notes: false,
+          watchers: false,
+          attachments: true,
+          custom_fields: false
+        }
+      else
+        {
+          type: true,
+          pinned: true,
+          archived: true,
+          comments: true,
+          internal_notes: true,
+          watchers: true,
+          attachments: true,
+          custom_fields: true
+        }
+      end
     end
 
     def option_value(options, key)
