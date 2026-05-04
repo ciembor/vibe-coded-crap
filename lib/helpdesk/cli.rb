@@ -33,7 +33,8 @@ module Helpdesk
         when "overdue" then overdue
         when "remind" then remind(args)
         when "reminders" then reminders
-        when "stats" then stats
+        when "dashboard" then dashboard
+        when "stats" then dashboard
         when "exit", "quit" then break
         else
           puts "Unknown command: #{command}. Type 'help'."
@@ -67,6 +68,7 @@ module Helpdesk
           tag add ID TAG
           tag remove ID TAG
           search QUERY
+          dashboard
           stats
           exit
       HELP
@@ -241,19 +243,53 @@ module Helpdesk
       end
     end
 
-    def stats
+    def dashboard
       tickets = @store.all
       counts = tickets.group_by(&:status).transform_values(&:count)
+      priority_counts = tickets.group_by(&:priority).transform_values(&:count)
+      recent_tickets = tickets.sort_by { |ticket| ticket.updated_at.to_s }.reverse.take(5)
+      open_tickets = tickets.select { |ticket| %w[open in_progress waiting].include?(ticket.status) }
+      oldest_open_ticket = open_tickets.min_by { |ticket| ticket.created_at.to_s }
+      tag_counts = tickets.flat_map(&:tags).tally.sort_by { |tag, count| [-count, tag] }.first(5)
+
+      puts "Dashboard"
       puts "Total tickets: #{tickets.count}"
-      puts "Overdue: #{tickets.count(&:overdue?)}"
       puts "Open: #{counts.fetch("open", 0)}"
       puts "In progress: #{counts.fetch("in_progress", 0)}"
       puts "Waiting: #{counts.fetch("waiting", 0)}"
       puts "Resolved: #{counts.fetch("resolved", 0)}"
       puts "Closed: #{counts.fetch("closed", 0)}"
-      puts "Total comments: #{tickets.sum { |ticket| ticket.comments.count }}"
+      puts "Overdue: #{tickets.count(&:overdue?)}"
       puts "Due reminders: #{tickets.count(&:reminder_due?)}"
+      puts "Total comments: #{tickets.sum { |ticket| ticket.comments.count }}"
+      puts "Priority breakdown:"
+      Ticket::PRIORITIES.each do |priority|
+        puts "  #{priority}: #{priority_counts.fetch(priority, 0)}"
+      end
+      puts "Recent updates:"
+      if recent_tickets.empty?
+        puts "  none"
+      else
+        recent_tickets.each do |ticket|
+          puts "  ##{ticket.id} #{ticket.title} (updated #{ticket.updated_at})"
+        end
+      end
+      if oldest_open_ticket
+        puts "Oldest open ticket: ##{oldest_open_ticket.id} #{oldest_open_ticket.title} (created #{oldest_open_ticket.created_at})"
+      else
+        puts "Oldest open ticket: none"
+      end
+      puts "Top tags:"
+      if tag_counts.empty?
+        puts "  none"
+      else
+        tag_counts.each do |tag, count|
+          puts "  #{tag}: #{count}"
+        end
+      end
     end
+
+    alias stats dashboard
 
     def prompt(label, default = nil)
       if default.nil? || default.empty?
