@@ -142,6 +142,8 @@ module Helpdesk
     end
 
     def create_ticket
+      return unless require_permission!(:ticket_write)
+
       title = prompt("Title")
       description = prompt("Description")
       status = prompt("Status", "open")
@@ -166,6 +168,8 @@ module Helpdesk
     end
 
     def edit_ticket(args)
+      return unless require_permission!(:ticket_write)
+
       id = required_id(args)
       ticket = @store.find(id)
       return puts "Ticket not found." unless ticket
@@ -186,6 +190,8 @@ module Helpdesk
     end
 
     def delete_ticket(args)
+      return unless require_permission!(:ticket_write)
+
       id = required_id(args)
       if @store.delete(id)
         puts "Deleted ticket ##{id}."
@@ -195,6 +201,8 @@ module Helpdesk
     end
 
     def close_tickets(args)
+      return unless require_permission!(:ticket_write)
+
       ids = args.map { |arg| arg.to_i }.reject(&:zero?)
       if ids.empty?
         puts "Usage: close ID [ID ...]"
@@ -210,6 +218,8 @@ module Helpdesk
     end
 
     def change_status(args)
+      return unless require_permission!(:ticket_write)
+
       id = required_id(args)
       status = args[1]
       ticket = @store.update(id, status: status)
@@ -223,6 +233,8 @@ module Helpdesk
     end
 
     def add_comment(args)
+      return unless require_permission!(:ticket_write)
+
       id = required_id(args)
       ticket = @store.find(id)
       return puts "Ticket not found." unless ticket
@@ -235,6 +247,8 @@ module Helpdesk
     end
 
     def manage_tags(args)
+      return unless require_permission!(:ticket_write)
+
       action = args[0]
       case action
       when "add", "remove"
@@ -383,6 +397,8 @@ module Helpdesk
     end
 
     def import(args)
+      return unless require_permission!(:admin)
+
       format = args[0]
       case format
       when "json"
@@ -413,6 +429,8 @@ module Helpdesk
       action = args[0]
       case action
       when "add"
+        return unless require_permission!(:admin)
+
         name = prompt("Name")
         email = prompt("Email", "")
         role = prompt("Role (admin, agent, viewer)", "agent")
@@ -426,6 +444,8 @@ module Helpdesk
         @current_user = user
         puts "Switched to #{user.display_name}."
       when "role"
+        return unless require_permission!(:admin)
+
         user = @users.find(required_id(args.drop(1)))
         return puts "User not found." unless user
 
@@ -513,6 +533,8 @@ module Helpdesk
     end
 
     def reminders
+      return unless require_permission!(:ticket_write)
+
       tickets = @store.all.select(&:reminder_due?)
       if tickets.empty?
         puts "No due reminders."
@@ -529,6 +551,8 @@ module Helpdesk
     end
 
     def remind(args)
+      return unless require_permission!(:ticket_write)
+
       action = args[0]
       id = args[1]
       ticket = @store.find(id)
@@ -580,6 +604,25 @@ module Helpdesk
       return unless @users.all.empty?
 
       @users.create(name: "agent", email: "", role: "agent")
+    end
+
+    def require_permission!(kind)
+      role = @current_user&.role_label || "agent"
+
+      allowed =
+        case kind
+        when :ticket_write
+          %w[admin agent].include?(role)
+        when :admin
+          role == "admin"
+        else
+          true
+        end
+
+      return true if allowed
+
+      puts "Permission denied for #{kind.to_s.tr('_', ' ')} as #{role}."
+      false
     end
   end
 end
