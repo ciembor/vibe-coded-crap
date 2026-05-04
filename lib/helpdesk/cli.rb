@@ -104,6 +104,9 @@ module Helpdesk
           user role ID ROLE
           notify show
           notify set KEY VALUE
+          notify suppress show
+          notify suppress add RULE
+          notify suppress remove RULE
           notify email ID [BODY]
           whoami
           audit [--last N] [--action ACTION] [--actor NAME] [--subject TEXT]
@@ -280,7 +283,7 @@ module Helpdesk
       body = prompt("Comment") if body.strip.empty?
       ticket.add_comment(body: body, author: prompt("Author", current_user_name))
       @store.save_ticket(ticket)
-      send_email_notifications(ticket, subject: "Comment added to ticket ##{ticket.id}", body: body)
+      send_email_notifications(ticket, subject: "Comment added to ticket ##{ticket.id}", body: body, event: "comments")
       log_action("ticket.comment", "ticket ##{id}", author: current_user_name)
       puts "Added comment to ticket ##{id}."
     end
@@ -572,6 +575,7 @@ module Helpdesk
       if @current_user
         puts "Current user: ##{@current_user.id} #{@current_user.display_name} (role: #{@current_user.role_label})"
         puts "Notification prefs: #{@current_user.notification_preferences_label}"
+        puts "Suppression rules: #{@current_user.notification_suppression_rules_label}"
       else
         puts "No current user."
       end
@@ -588,6 +592,8 @@ module Helpdesk
         return puts "Usage: notify set KEY VALUE" if key.to_s.strip.empty? || value.to_s.strip.empty?
 
         update_notification_preferences(key, value)
+      when "suppress"
+        manage_notification_suppression(args.drop(1))
       when "email"
         return unless require_permission!(:ticket_write)
 
@@ -597,9 +603,9 @@ module Helpdesk
 
         body = args.drop(2).join(" ")
         body = "Ticket ##{ticket.id}: #{ticket.title}" if body.strip.empty?
-        send_email_notifications(ticket, subject: "Ticket ##{ticket.id}", body: body)
+        send_email_notifications(ticket, subject: "Ticket ##{ticket.id}", body: body, event: "manual")
       else
-        puts "Usage: notify show | notify set KEY VALUE | notify email ID [BODY]"
+        puts "Usage: notify show | notify set KEY VALUE | notify suppress show|add|remove ... | notify email ID [BODY]"
       end
     rescue ArgumentError => e
       puts e.message
@@ -777,6 +783,61 @@ module Helpdesk
       end
     end
 
+    def manage_notification_suppression(args)
+      action = args[0]
+      case action
+      when "show"
+        show_notification_suppression_rules
+      when "add"
+        rule = args[1]
+        return puts "Usage: notify suppress add RULE" if rule.to_s.strip.empty?
+
+        update_notification_suppression_rules(:add, rule)
+      when "remove"
+        rule = args[1]
+        return puts "Usage: notify suppress remove RULE" if rule.to_s.strip.empty?
+
+        update_notification_suppression_rules(:remove, rule)
+      else
+        puts "Usage: notify suppress show | notify suppress add RULE | notify suppress remove RULE"
+      end
+    rescue ArgumentError => e
+      puts e.message
+    end
+
+    def show_notification_suppression_rules
+      rules = @current_user.notification_suppression_rules || []
+      if rules.empty?
+        puts "No suppression rules."
+        return
+      end
+
+      rules.each { |rule| puts rule }
+    end
+
+    def update_notification_suppression_rules(action, rule)
+      rules = (@current_user.notification_suppression_rules || []).dup
+      rule = rule.to_s.strip.downcase
+      return puts "Rule cannot be empty." if rule.empty?
+
+      case action
+      when :add
+        rules << rule unless rules.include?(rule)
+      when :remove
+        rules.delete(rule)
+      end
+
+      updated_user = @users.update(@current_user.id, notification_suppression_rules: rules)
+      if updated_user
+        @current_user = updated_user
+      else
+        @current_user.notification_suppression_rules = rules
+        @users.save_user(@current_user)
+      end
+      log_action("user.notification_suppression_rules", "user ##{@current_user.id}", notification_suppression_rules: rules)
+      puts "Updated suppression rules: #{rules.empty? ? 'none' : rules.join(', ')}"
+    end
+
     def update_notification_preferences(key, value)
       prefs = (@current_user.notification_preferences || {}).dup
       prefs[key.to_s] = parse_boolean(value)
@@ -791,7 +852,7 @@ module Helpdesk
       puts "Updated notification preference #{key} to #{prefs[key.to_s]}."
     end
 
-    def send_email_notifications(ticket, subject:, body:)
+    def send_email_notifications(ticket, subject:, body:, event:)
       recipients = email_recipients(ticket)
       if recipients.empty?
         puts "No email recipients for ticket ##{ticket.id}."
@@ -799,6 +860,8 @@ module Helpdesk
       end
 
       recipients.each do |user|
+        next if suppressed_notification?(user, ticket, event)
+
         puts "[email mock] To: #{user.display_name}"
         puts "[email mock] Subject: #{subject}"
         puts "[email mock] Body: #{body}"
@@ -814,6 +877,16 @@ module Helpdesk
           user.email_notifications_enabled? &&
           user.preference_enabled?("watchers")
       end
+    end
+
+    def suppressed_notification?(user, ticket, event)
+      rules = user.notification_suppression_rules || []
+      rules.include?("all") ||
+        (event == "comments" && rules.include?("comments")) ||
+        (event == "reminders" && rules.include?("reminders")) ||
+        (event == "manual" && rules.include?("manual")) ||
+        rules.include?("watchers") ||
+        (ticket.closed? && rules.include?("closed_tickets"))
     end
 
     def parse_boolean(value)
