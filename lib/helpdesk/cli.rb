@@ -1,5 +1,7 @@
 require "shellwords"
 require "time"
+require "csv"
+require "fileutils"
 require "helpdesk/store"
 
 module Helpdesk
@@ -35,6 +37,7 @@ module Helpdesk
         when "reminders" then reminders
         when "dashboard" then dashboard
         when "stats" then dashboard
+        when "export" then export(args)
         when "exit", "quit" then break
         else
           puts "Unknown command: #{command}. Type 'help'."
@@ -70,6 +73,7 @@ module Helpdesk
           search QUERY
           dashboard
           stats
+          export csv [PATH]
           exit
       HELP
     end
@@ -290,6 +294,47 @@ module Helpdesk
     end
 
     alias stats dashboard
+
+    def export(args)
+      format = args[0]
+      case format
+      when "csv"
+        path = args[1] || prompt("CSV path", "data/tickets.csv")
+        export_csv(path)
+      else
+        puts "Usage: export csv [PATH]"
+      end
+    end
+
+    def export_csv(path)
+      tickets = @store.all
+      FileUtils.mkdir_p(File.dirname(path))
+      CSV.open(path, "w") do |csv|
+        csv << %w[
+          id title description status priority due_at overdue reminder_at reminder_repeat
+          tags comment_count created_at updated_at closed_at
+        ]
+        tickets.each do |ticket|
+          csv << [
+            ticket.id,
+            ticket.title,
+            ticket.description,
+            ticket.status,
+            ticket.priority,
+            ticket.due_at,
+            ticket.overdue?,
+            ticket.reminder_at,
+            ticket.reminder_repeat,
+            ticket.tags.join(";"),
+            ticket.comments.count,
+            ticket.created_at,
+            ticket.updated_at,
+            ticket.closed_at
+          ]
+        end
+      end
+      puts "Exported #{tickets.count} tickets to #{path}."
+    end
 
     def prompt(label, default = nil)
       if default.nil? || default.empty?
