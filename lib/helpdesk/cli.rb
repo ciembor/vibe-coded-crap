@@ -204,7 +204,7 @@ module Helpdesk
           webhooks
           webhook add NAME URL [EVENT ...]
           webhook remove ID
-          webhook test ID [EVENT]
+          webhook test ID [EVENT] [--fail|--flaky]
           exit
       HELP
     end
@@ -1775,9 +1775,12 @@ module Helpdesk
 
         event = args[2].to_s.strip
         event = "webhook.test" if event.empty?
-        deliver_webhook(webhook, webhook_payload(event, "webhook ##{webhook["id"]}", { "test" => true }))
+        mode = args[3..].to_a.find { |arg| %w[--fail --flaky].include?(arg) }
+        details = { "test" => true }
+        details["mode"] = mode.delete_prefix("--") if mode
+        deliver_webhook(webhook, webhook_payload(event, "webhook ##{webhook["id"]}", details))
       else
-        puts "Usage: webhook add NAME URL [EVENT ...] | webhook remove ID | webhook test ID [EVENT]"
+        puts "Usage: webhook add NAME URL [EVENT ...] | webhook remove ID | webhook test ID [EVENT] [--fail|--flaky]"
       end
     rescue ArgumentError => e
       puts e.message
@@ -2750,10 +2753,39 @@ module Helpdesk
     end
 
     def deliver_webhook(webhook, payload)
-      puts "[webhook mock] POST #{webhook["url"]}"
-      puts "[webhook mock] Webhook ##{webhook["id"]} #{webhook["name"]}"
-      puts "[webhook mock] Event: #{payload["action"]}"
-      puts "[webhook mock] Payload: #{JSON.generate(payload)}"
+      max_attempts = 3
+      max_attempts.times do |attempt_index|
+        attempt = attempt_index + 1
+        puts "[webhook mock] Attempt #{attempt}/#{max_attempts} POST #{webhook["url"]}"
+        puts "[webhook mock] Webhook ##{webhook["id"]} #{webhook["name"]}"
+        puts "[webhook mock] Event: #{payload["action"]}"
+        puts "[webhook mock] Payload: #{JSON.generate(payload)}"
+
+        if webhook_delivery_succeeds?(webhook, payload, attempt)
+          puts "[webhook mock] Delivered."
+          return true
+        end
+
+        if attempt < max_attempts
+          puts "[webhook mock] Delivery failed, retrying..."
+        else
+          puts "[webhook mock] Delivery failed after #{max_attempts} attempts."
+        end
+      end
+
+      false
+    end
+
+    def webhook_delivery_succeeds?(webhook, payload, attempt)
+      url = webhook["url"].to_s
+      mode = payload.dig("details", "mode").to_s
+
+      return false if mode == "fail"
+      return attempt >= 3 if mode == "flaky"
+      return false if url.include?("fail")
+      return attempt >= 3 if url.include?("flaky")
+
+      true
     end
 
     def parse_audit_options(args)
