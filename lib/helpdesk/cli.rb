@@ -49,6 +49,7 @@ module Helpdesk
         when "undo" then undo(args)
         when "merge" then merge_tickets(args)
         when "relate" then manage_relationships(args)
+        when "parent" then manage_hierarchy(args)
         when "status" then change_status(args)
         when "comment" then add_comment(args)
         when "note" then add_note(args)
@@ -119,6 +120,9 @@ module Helpdesk
           relate add SOURCE_ID TARGET_ID
           relate remove SOURCE_ID TARGET_ID
           relate list ID
+          parent set CHILD_ID PARENT_ID
+          parent clear ID
+          parent list ID
           status ID STATUS
           comment ID TEXT
           note ID TEXT
@@ -239,6 +243,7 @@ module Helpdesk
       puts "Merged into: ##{ticket.merged_into_id}" if ticket.merged?
       puts "Merged from: #{ticket.merged_from_ids.map { |id| "##{id}" }.join(", ")}" unless ticket.merged_from_ids.empty?
       show_related_tickets(ticket)
+      show_hierarchy(ticket)
       puts "Created: #{ticket.created_at}"
       puts "Updated: #{ticket.updated_at}"
       puts "Description:"
@@ -522,6 +527,64 @@ module Helpdesk
         end
       else
         puts "Usage: relate add SOURCE_ID TARGET_ID | relate remove SOURCE_ID TARGET_ID | relate list ID"
+      end
+    rescue ArgumentError => e
+      puts e.message
+    end
+
+    def manage_hierarchy(args)
+      return unless require_permission!(:ticket_write)
+
+      action = args[0]
+      case action
+      when "set"
+        child_id = args[1]
+        parent_id = args[2]
+        if child_id.to_s.strip.empty? || parent_id.to_s.strip.empty?
+          puts "Usage: parent set CHILD_ID PARENT_ID"
+          return
+        end
+
+        result = @store.set_parent(child_id, parent_id)
+        unless result
+          puts "Ticket not found."
+          return
+        end
+
+        log_action("ticket.parent_set", "ticket ##{child_id} -> ##{parent_id}", child: child_id.to_i, parent: parent_id.to_i)
+        puts "Set ticket ##{parent_id} as parent of ##{child_id}."
+      when "clear"
+        id = args[1]
+        if id.to_s.strip.empty?
+          puts "Usage: parent clear ID"
+          return
+        end
+
+        result = @store.clear_parent(id)
+        unless result
+          puts "Ticket not found."
+          return
+        end
+
+        log_action("ticket.parent_clear", "ticket ##{id}", child: id.to_i, parent: result[:parent]&.id)
+        puts "Cleared parent for ticket ##{id}."
+      when "list"
+        id = required_id(args.drop(1))
+        ticket = @store.find(id)
+        return puts "Ticket not found." unless ticket
+
+        parent = @store.parent_ticket(ticket)
+        children = @store.child_tickets(ticket)
+        puts "Parent:"
+        puts parent ? "  #{format_ticket_row(parent)}" : "  none"
+        puts "Children:"
+        if children.empty?
+          puts "  none"
+        else
+          children.each { |child| puts "  #{format_ticket_row(child)}" }
+        end
+      else
+        puts "Usage: parent set CHILD_ID PARENT_ID | parent clear ID | parent list ID"
       end
     rescue ArgumentError => e
       puts e.message
@@ -1975,6 +2038,27 @@ module Helpdesk
       end
     end
 
+    def show_hierarchy(ticket)
+      parent = @store.parent_ticket(ticket)
+      children = @store.child_tickets(ticket)
+
+      puts "Parent ticket:"
+      if parent
+        puts "  #{format_ticket_row(parent)}"
+      else
+        puts "  none"
+      end
+
+      puts "Child tickets:"
+      if children.empty?
+        puts "  none"
+      else
+        children.each do |child|
+          puts "  #{format_ticket_row(child)}"
+        end
+      end
+    end
+
     def show_sla_rules
       rules = @sla_rules.all
       rules.each do |priority, rule|
@@ -2587,6 +2671,10 @@ module Helpdesk
           "related #{subject}"
         when "ticket.unrelate"
           "removed relationship for #{subject}"
+        when "ticket.parent_set"
+          "set parent for #{subject}"
+        when "ticket.parent_clear"
+          "cleared parent for #{subject}"
         when "ticket.archive"
           "archived #{subject}"
         when "ticket.unarchive"

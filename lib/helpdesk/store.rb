@@ -38,6 +38,16 @@ module Helpdesk
       all.select { |existing| ticket.related_ids.include?(existing.id.to_i) }
     end
 
+    def parent_ticket(ticket)
+      return nil if ticket.parent_id.nil?
+
+      find(ticket.parent_id)
+    end
+
+    def child_tickets(ticket)
+      all.select { |existing| ticket.child_ids.include?(existing.id.to_i) }
+    end
+
     def relate(source_id, target_id)
       source_id = source_id.to_i
       target_id = target_id.to_i
@@ -80,6 +90,59 @@ module Helpdesk
       tickets[target_index] = target.to_h
       save!(tickets)
       { source: source, target: target }
+    end
+
+    def set_parent(child_id, parent_id)
+      child_id = child_id.to_i
+      parent_id = parent_id.to_i
+      raise ArgumentError, "set_parent requires two ticket IDs" if child_id.zero? || parent_id.zero?
+      raise ArgumentError, "cannot set a ticket as its own parent" if child_id == parent_id
+
+      tickets = load_data
+      child_index = tickets.index { |row| row["id"].to_i == child_id }
+      parent_index = tickets.index { |row| row["id"].to_i == parent_id }
+      return nil unless child_index && parent_index
+
+      child = Ticket.from_h(tickets[child_index])
+      parent = Ticket.from_h(tickets[parent_index])
+      old_parent = child.parent_id ? tickets.find { |row| row["id"].to_i == child.parent_id.to_i } : nil
+      child.send(:set_parent, parent.id)
+      parent.send(:add_child, child.id)
+
+      tickets[child_index] = child.to_h
+      tickets[parent_index] = parent.to_h
+      if old_parent && old_parent["id"].to_i != parent.id.to_i
+        old_parent_ticket = Ticket.from_h(old_parent)
+        old_parent_ticket.send(:remove_child, child.id)
+        old_parent_index = tickets.index { |row| row["id"].to_i == old_parent_ticket.id.to_i }
+        tickets[old_parent_index] = old_parent_ticket.to_h if old_parent_index
+      end
+      save!(tickets)
+      { child: child, parent: parent }
+    end
+
+    def clear_parent(child_id)
+      child_id = child_id.to_i
+      raise ArgumentError, "clear_parent requires a ticket ID" if child_id.zero?
+
+      tickets = load_data
+      child_index = tickets.index { |row| row["id"].to_i == child_id }
+      return nil unless child_index
+
+      child = Ticket.from_h(tickets[child_index])
+      parent = child.parent_id ? find(child.parent_id) : nil
+      child.send(:clear_parent)
+      tickets[child_index] = child.to_h
+      if parent
+        parent_index = tickets.index { |row| row["id"].to_i == parent.id.to_i }
+        if parent_index
+          parent = Ticket.from_h(tickets[parent_index])
+          parent.send(:remove_child, child.id)
+          tickets[parent_index] = parent.to_h
+        end
+      end
+      save!(tickets)
+      { child: child, parent: parent }
     end
 
     def find(id)
