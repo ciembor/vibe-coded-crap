@@ -1,0 +1,88 @@
+require "json"
+require "fileutils"
+require "helpdesk/ticket"
+
+module Helpdesk
+  class Store
+    attr_reader :path
+
+    def initialize(path: default_path)
+      @path = path
+      FileUtils.mkdir_p(File.dirname(path))
+      save!([]) unless File.exist?(path)
+    end
+
+    def all
+      load_data.map { |row| Ticket.from_h(row) }
+    end
+
+    def find(id)
+      all.find { |ticket| ticket.id.to_i == id.to_i }
+    end
+
+    def create(attrs)
+      tickets = load_data
+      ticket = Ticket.new(
+        id: next_id(tickets),
+        title: attrs.fetch(:title),
+        description: attrs.fetch(:description, ""),
+        status: attrs.fetch(:status, "open"),
+        priority: attrs.fetch(:priority, "medium"),
+        tags: attrs.fetch(:tags, [])
+      ).normalize!
+      tickets << ticket.to_h
+      save!(tickets)
+      ticket
+    end
+
+    def update(id, attrs)
+      tickets = load_data
+      index = tickets.index { |row| row["id"].to_i == id.to_i }
+      return nil unless index
+
+      ticket = Ticket.from_h(tickets[index]).update(attrs)
+      tickets[index] = ticket.to_h
+      save!(tickets)
+      ticket
+    end
+
+    def delete(id)
+      tickets = load_data
+      removed = tickets.reject! { |row| row["id"].to_i == id.to_i }
+      save!(tickets) if removed
+      !removed.nil?
+    end
+
+    def save_ticket(ticket)
+      tickets = load_data
+      index = tickets.index { |row| row["id"].to_i == ticket.id.to_i }
+      if index
+        tickets[index] = ticket.to_h
+      else
+        tickets << ticket.to_h
+      end
+      save!(tickets)
+      ticket
+    end
+
+    private
+
+    def default_path
+      File.expand_path("../../data/tickets.json", __dir__)
+    end
+
+    def load_data
+      JSON.parse(File.read(path))
+    rescue Errno::ENOENT, JSON::ParserError
+      []
+    end
+
+    def save!(rows)
+      File.write(path, JSON.pretty_generate(rows))
+    end
+
+    def next_id(rows)
+      (rows.map { |row| row["id"].to_i }.max || 0) + 1
+    end
+  end
+end

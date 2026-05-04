@@ -1,0 +1,8 @@
+#!/usr/bin/env ruby
+
+root = File.expand_path("..", __dir__)
+$LOAD_PATH.unshift(File.join(root, "lib"))
+
+require "helpdesk"
+
+Helpdesk::CLI.new.run
