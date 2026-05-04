@@ -7,6 +7,7 @@ require "helpdesk/audit_log"
 require "helpdesk/escalation_rule_store"
 require "helpdesk/store"
 require "helpdesk/sla_rule_store"
+require "helpdesk/sort_rule_store"
 require "helpdesk/template_store"
 require "helpdesk/user_store"
 
@@ -17,6 +18,7 @@ module Helpdesk
       @audit_log = AuditLog.new
       @escalation_rules = EscalationRuleStore.new
       @sla_rules = SlaRuleStore.new
+      @sort_rules = SortRuleStore.new
       @templates = TemplateStore.new
       @users = UserStore.new
       @escalation_rules.reload_ticket_rules!
@@ -68,6 +70,7 @@ module Helpdesk
         when "escalate" then escalate_ticket(args)
         when "analytics" then analytics(args)
         when "report" then report(args)
+        when "sort" then manage_sorting(args)
         when "remind" then remind(args)
         when "reminders" then reminders
         when "dashboard" then dashboard
@@ -97,7 +100,7 @@ module Helpdesk
       puts <<~HELP
         Commands:
           help
-          list [--status STATUS] [--priority PRIORITY] [--tag TAG] [--sort created_at|priority] [--overdue] [--archived|--active]
+          list [--status STATUS] [--priority PRIORITY] [--tag TAG] [--sort created_at|priority|custom] [--overdue] [--archived|--active]
           overdue
           reminders
           remind set ID TIMESTAMP
@@ -160,6 +163,9 @@ module Helpdesk
           analytics [summary|status|aging|trend]
           report daily [DATE]
           report weekly [DATE]
+          sort rules show
+          sort rules set FIELD [FIELD ...]
+          sort rules reset
           dashboard
           stats
           export csv [PATH]
@@ -1241,6 +1247,68 @@ module Helpdesk
       end
     end
 
+    def manage_sorting(args)
+      action = args[0]
+      case action
+      when nil, "show"
+        show_sort_rules
+      when "set"
+        return unless require_permission!(:admin)
+
+        fields = args.drop(1)
+        return puts "Usage: sort rules set FIELD [FIELD ...]" if fields.empty?
+
+        rule = @sort_rules.set(fields)
+        log_action("sort.rules_set", "sort", fields: rule)
+        puts "Updated custom sort rule."
+      when "reset"
+        return unless require_permission!(:admin)
+
+        rule = @sort_rules.reset
+        log_action("sort.rules_reset", "sort", fields: rule)
+        puts "Reset custom sort rule."
+      when "rules"
+        manage_sort_rules(args.drop(1))
+      else
+        puts "Usage: sort rules show | sort rules set FIELD [FIELD ...] | sort rules reset"
+      end
+    rescue ArgumentError => e
+      puts e.message
+    end
+
+    def manage_sort_rules(args)
+      action = args[0]
+      case action
+      when nil, "show"
+        show_sort_rules
+      when "set"
+        return unless require_permission!(:admin)
+
+        fields = args.drop(1)
+        return puts "Usage: sort rules set FIELD [FIELD ...]" if fields.empty?
+
+        rule = @sort_rules.set(fields)
+        log_action("sort.rules_set", "sort", fields: rule)
+        puts "Updated custom sort rule."
+      when "reset"
+        return unless require_permission!(:admin)
+
+        rule = @sort_rules.reset
+        log_action("sort.rules_reset", "sort", fields: rule)
+        puts "Reset custom sort rule."
+      else
+        puts "Usage: sort rules show | sort rules set FIELD [FIELD ...] | sort rules reset"
+      end
+    rescue ArgumentError => e
+      puts e.message
+    end
+
+    def show_sort_rules
+      rule = @sort_rules.current
+      puts "Custom sort order: #{rule.join(' > ')}"
+      puts "Allowed fields: #{SortRuleStore::ALLOWED_FIELDS.join(', ')}"
+    end
+
     def export(args)
       format = args[0]
       case format
@@ -1484,8 +1552,49 @@ module Helpdesk
       when "priority"
         order = Ticket::PRIORITIES.each_with_index.to_h
         tickets.sort_by { |ticket| [ticket.archived? ? 1 : 0, ticket.pinned? ? 0 : 1, order.fetch(ticket.priority, 99), ticket.created_at.to_s] }
+      when "custom"
+        tickets.sort_by { |ticket| custom_sort_key(ticket) }
       else
         tickets.sort_by { |ticket| [ticket.archived? ? 1 : 0, ticket.pinned? ? 0 : 1, ticket.created_at.to_s] }
+      end
+    end
+
+    def custom_sort_key(ticket)
+      rule = @sort_rules.current
+      rule.map { |field| custom_sort_value(ticket, field) } + [ticket.created_at.to_s, ticket.id.to_i]
+    end
+
+    def custom_sort_value(ticket, field)
+      case field
+      when "pinned"
+        ticket.pinned? ? 0 : 1
+      when "archived"
+        ticket.archived? ? 1 : 0
+      when "overdue"
+        ticket.overdue? ? 0 : 1
+      when "escalation"
+        ticket.escalation_needed? ? 0 : 1
+      when "sla"
+        case ticket.sla_status
+        when "breached" then 0
+        when "warning" then 1
+        when "ok" then 2
+        else 3
+        end
+      when "priority"
+        Ticket::PRIORITIES.each_with_index.to_h.fetch(ticket.priority, 99)
+      when "status"
+        %w[open in_progress waiting resolved closed].each_with_index.to_h.fetch(ticket.status, 99)
+      when "due_at"
+        ticket.due_date ? ticket.due_date.iso8601 : "9999-12-31"
+      when "updated_at"
+        ticket.updated_at.to_s
+      when "created_at"
+        ticket.created_at.to_s
+      when "title"
+        ticket.title.to_s.downcase
+      else
+        ""
       end
     end
 
