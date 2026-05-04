@@ -58,7 +58,7 @@ module Helpdesk
     private
 
     def banner
-      current = @current_user ? " (current user: #{@current_user.name})" : ""
+      current = @current_user ? " (current user: #{@current_user.name}, role: #{@current_user.role_label})" : ""
       "Helpdesk CLI#{current} - type 'help' for commands"
     end
 
@@ -91,6 +91,7 @@ module Helpdesk
           users
           user add
           user switch ID
+          user role ID ROLE
           whoami
           exit
       HELP
@@ -404,7 +405,7 @@ module Helpdesk
 
       users.each do |user|
         marker = @current_user && user.id.to_i == @current_user.id.to_i ? " *" : ""
-        puts "##{user.id} #{user.display_name}#{marker}"
+        puts "##{user.id} #{user.display_name} [#{user.role_label}]#{marker}"
       end
     end
 
@@ -414,7 +415,8 @@ module Helpdesk
       when "add"
         name = prompt("Name")
         email = prompt("Email", "")
-        user = @users.create(name: name, email: email)
+        role = prompt("Role (admin, agent, viewer)", "agent")
+        user = @users.create(name: name, email: email, role: role)
         @current_user ||= user
         puts "Created user ##{user.id}."
       when "switch"
@@ -423,8 +425,16 @@ module Helpdesk
 
         @current_user = user
         puts "Switched to #{user.display_name}."
+      when "role"
+        user = @users.find(required_id(args.drop(1)))
+        return puts "User not found." unless user
+
+        role = args[2]
+        role = prompt("Role (admin, agent, viewer)", user.role_label) if role.to_s.strip.empty?
+        user = @users.update(user.id, role: role)
+        puts "Updated role for #{user.display_name} to #{user.role_label}."
       else
-        puts "Usage: user add | user switch ID"
+        puts "Usage: user add | user switch ID | user role ID ROLE"
       end
     rescue ArgumentError => e
       puts e.message
@@ -432,7 +442,7 @@ module Helpdesk
 
     def whoami
       if @current_user
-        puts "Current user: ##{@current_user.id} #{@current_user.display_name}"
+        puts "Current user: ##{@current_user.id} #{@current_user.display_name} (role: #{@current_user.role_label})"
       else
         puts "No current user."
       end
@@ -569,7 +579,7 @@ module Helpdesk
     def seed_default_user
       return unless @users.all.empty?
 
-      @users.create(name: "agent", email: "")
+      @users.create(name: "agent", email: "", role: "agent")
     end
   end
 end
