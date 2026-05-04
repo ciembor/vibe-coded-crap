@@ -76,7 +76,7 @@ module Helpdesk
       puts <<~HELP
         Commands:
           help
-          list [--status STATUS] [--priority PRIORITY] [--tag TAG] [--sort created_at|priority] [--overdue]
+          list [--status STATUS] [--priority PRIORITY] [--tag TAG] [--sort created_at|priority] [--overdue] [--archived|--active]
           overdue
           reminders
           remind set ID TIMESTAMP
@@ -135,6 +135,8 @@ module Helpdesk
       tickets = tickets.select { |ticket| ticket.priority == options[:priority] } if options[:priority]
       tickets = tickets.select { |ticket| ticket.tags.include?(options[:tag]) } if options[:tag]
       tickets = tickets.select(&:overdue?) if options[:overdue]
+      tickets = tickets.select(&:archived?) if options[:archived]
+      tickets = tickets.reject(&:archived?) if options[:active]
       tickets = sort_tickets(tickets, options[:sort])
 
       if tickets.empty?
@@ -854,6 +856,12 @@ module Helpdesk
           idx += 2
         when "--overdue"
           options[:overdue] = true
+          idx += 1
+        when "--archived"
+          options[:archived] = true
+          idx += 1
+        when "--active"
+          options[:active] = true
           idx += 1
         else
           idx += 1
