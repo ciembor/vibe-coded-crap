@@ -6,7 +6,7 @@ module Helpdesk
     STATUSES = %w[open in_progress waiting resolved closed].freeze
     PRIORITIES = %w[low medium high urgent].freeze
 
-    attr_accessor :id, :title, :description, :status, :priority, :tags, :comments, :internal_notes, :watchers, :attachments, :custom_fields, :pinned, :pinned_at, :archived, :archived_at, :created_at, :updated_at, :closed_at, :due_at, :reminder_at, :reminder_repeat
+    attr_accessor :id, :title, :description, :status, :priority, :tags, :comments, :internal_notes, :watchers, :attachments, :custom_fields, :ticket_type, :pinned, :pinned_at, :archived, :archived_at, :created_at, :updated_at, :closed_at, :due_at, :reminder_at, :reminder_repeat
 
     def self.from_h(hash)
       ticket = new(
@@ -21,6 +21,7 @@ module Helpdesk
         watchers: hash["watchers"] || [],
         attachments: hash["attachments"] || [],
         custom_fields: hash["custom_fields"] || {},
+        ticket_type: hash["ticket_type"],
         pinned: hash["pinned"],
         pinned_at: hash["pinned_at"],
         archived: hash["archived"],
@@ -36,7 +37,7 @@ module Helpdesk
       ticket
     end
 
-    def initialize(id: nil, title: "", description: "", status: "open", priority: "medium", tags: [], comments: [], internal_notes: [], watchers: [], attachments: [], custom_fields: {}, pinned: false, pinned_at: nil, archived: false, archived_at: nil, created_at: nil, updated_at: nil, closed_at: nil, due_at: nil, reminder_at: nil, reminder_repeat: nil)
+    def initialize(id: nil, title: "", description: "", status: "open", priority: "medium", tags: [], comments: [], internal_notes: [], watchers: [], attachments: [], custom_fields: {}, ticket_type: "general", pinned: false, pinned_at: nil, archived: false, archived_at: nil, created_at: nil, updated_at: nil, closed_at: nil, due_at: nil, reminder_at: nil, reminder_repeat: nil)
       @id = id
       @title = title
       @description = description
@@ -48,6 +49,7 @@ module Helpdesk
       @watchers = watchers.dup
       @attachments = attachments.dup
       @custom_fields = custom_fields
+      @ticket_type = ticket_type
       @pinned = pinned
       @pinned_at = pinned_at
       @archived = archived
@@ -67,6 +69,7 @@ module Helpdesk
       self.reminder_at = normalize_reminder_at(reminder_at)
       self.reminder_repeat = normalize_reminder_repeat(reminder_repeat)
       self.tags = Array(tags).map { |tag| tag.to_s.strip }.reject(&:empty?).uniq.sort
+      self.ticket_type = normalize_ticket_type(ticket_type)
       self.comments = Array(comments).map do |comment|
         {
           "id" => comment["id"] || comment[:id],
@@ -127,6 +130,7 @@ module Helpdesk
         }
       end
       self.custom_fields = normalize_custom_fields(attrs.fetch(:custom_fields, custom_fields))
+      self.ticket_type = normalize_ticket_type(attrs.fetch(:ticket_type, ticket_type))
       if attrs.key?(:pinned)
         self.pinned = !!attrs[:pinned]
         self.pinned_at = pinned? ? (attrs.fetch(:pinned_at, pinned_at) || Time.now.utc.iso8601) : nil
@@ -272,6 +276,23 @@ module Helpdesk
       !!archived
     end
 
+    def valid_for_type?
+      validation_errors.empty?
+    end
+
+    def validation_errors
+      errors = []
+      case ticket_type
+      when "bug"
+        errors << "bug tickets require a severity field" if custom_fields["severity"].to_s.strip.empty?
+      when "feature"
+        errors << "feature tickets require a requested_by field" if custom_fields["requested_by"].to_s.strip.empty?
+      when "incident"
+        errors << "incident tickets require an impact field" if custom_fields["impact"].to_s.strip.empty?
+      end
+      errors
+    end
+
     def due_date
       return nil if due_at.to_s.strip.empty?
 
@@ -335,6 +356,7 @@ module Helpdesk
         "watchers" => watchers,
         "attachments" => attachments,
         "custom_fields" => custom_fields,
+        "ticket_type" => ticket_type,
         "pinned" => pinned?,
         "pinned_at" => pinned_at,
         "archived" => archived?,
@@ -426,6 +448,14 @@ module Helpdesk
 
         normalized[key] = val.to_s
       end
+    end
+
+    def normalize_ticket_type(value)
+      value = value.to_s.strip.downcase
+      value = "general" if value.empty?
+      return value if %w[general bug feature incident].include?(value)
+
+      raise ArgumentError, "invalid ticket type: #{value}"
     end
 
     def next_comment_id

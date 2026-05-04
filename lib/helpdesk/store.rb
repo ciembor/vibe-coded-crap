@@ -31,10 +31,13 @@ module Helpdesk
         tags: attrs.fetch(:tags, []),
         internal_notes: attrs.fetch(:internal_notes, []),
         attachments: attrs.fetch(:attachments, []),
+        custom_fields: attrs.fetch(:custom_fields, {}),
+        ticket_type: attrs.fetch(:ticket_type, "general"),
         due_at: attrs.fetch(:due_at, nil),
         reminder_at: attrs.fetch(:reminder_at, nil),
         reminder_repeat: attrs.fetch(:reminder_repeat, nil)
       ).normalize!
+      validate_ticket!(ticket)
       tickets << ticket.to_h
       save!(tickets)
       ticket
@@ -46,6 +49,7 @@ module Helpdesk
       return nil unless index
 
       ticket = Ticket.from_h(tickets[index]).update(attrs)
+      validate_ticket!(ticket)
       tickets[index] = ticket.to_h
       save!(tickets)
       ticket
@@ -107,6 +111,7 @@ module Helpdesk
     end
 
     def save_ticket(ticket)
+      validate_ticket!(ticket)
       tickets = load_data
       index = tickets.index { |row| row["id"].to_i == ticket.id.to_i }
       if index
@@ -151,6 +156,13 @@ module Helpdesk
 
     def next_id(rows)
       (rows.map { |row| row["id"].to_i }.max || 0) + 1
+    end
+
+    def validate_ticket!(ticket)
+      errors = ticket.validation_errors
+      return if errors.empty?
+
+      raise ArgumentError, errors.join("; ")
     end
   end
 end

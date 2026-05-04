@@ -172,6 +172,7 @@ module Helpdesk
       puts "##{ticket.id} #{ticket.title}"
       puts "Status: #{ticket.status}"
       puts "Priority: #{ticket.priority}"
+      puts "Type: #{ticket.ticket_type}"
       puts "Due: #{ticket.due_at || 'none'}"
       puts "Overdue: #{ticket.overdue? ? 'yes' : 'no'}"
       puts "Reminder: #{ticket.reminder_at || 'none'}"
@@ -252,6 +253,8 @@ module Helpdesk
       description = prompt("Description")
       status = prompt("Status", "open")
       priority = prompt("Priority", "medium")
+      ticket_type = prompt("Type (general, bug, feature, incident)", "general")
+      custom_fields = prompt_custom_fields_for_type(ticket_type)
       due_at = prompt("Due date (YYYY-MM-DD)", "")
       reminder_at = prompt("Reminder time (YYYY-MM-DD HH:MM, optional)", "")
       reminder_repeat = prompt("Reminder repeat (daily, weekly, monthly, optional)", "")
@@ -261,6 +264,8 @@ module Helpdesk
         description: description,
         status: status,
         priority: priority,
+        ticket_type: ticket_type,
+        custom_fields: custom_fields,
         due_at: due_at,
         reminder_at: reminder_at,
         reminder_repeat: reminder_repeat,
@@ -284,6 +289,8 @@ module Helpdesk
       attrs[:description] = prompt("Description", ticket.description)
       attrs[:status] = prompt("Status", ticket.status)
       attrs[:priority] = prompt("Priority", ticket.priority)
+      attrs[:ticket_type] = prompt("Type (general, bug, feature, incident)", ticket.ticket_type || "general")
+      attrs[:custom_fields] = prompt_custom_fields_for_type(attrs[:ticket_type], ticket.custom_fields)
       attrs[:due_at] = prompt("Due date (YYYY-MM-DD)", ticket.due_at || "")
       attrs[:reminder_at] = prompt("Reminder time (YYYY-MM-DD HH:MM, optional)", ticket.reminder_at || "")
       attrs[:reminder_repeat] = prompt("Reminder repeat (daily, weekly, monthly, optional)", ticket.reminder_repeat || "")
@@ -608,6 +615,27 @@ module Helpdesk
       puts e.message
     end
 
+    def prompt_custom_fields_for_type(ticket_type, existing_fields = {})
+      fields = existing_fields.is_a?(Hash) ? existing_fields.dup : {}
+      required_custom_fields(ticket_type).each do |key, label|
+        fields[key] = prompt("#{label}", fields[key].to_s)
+      end
+      fields
+    end
+
+    def required_custom_fields(ticket_type)
+      case ticket_type.to_s.strip.downcase
+      when "bug"
+        { "severity" => "Severity (bug)" }
+      when "feature"
+        { "requested_by" => "Requested by (feature)" }
+      when "incident"
+        { "impact" => "Impact (incident)" }
+      else
+        {}
+      end
+    end
+
     def manage_tags(args)
       return unless require_permission!(:ticket_write)
 
@@ -839,6 +867,7 @@ module Helpdesk
         haystack = [
           ticket.title,
           ticket.description,
+          ticket.ticket_type,
           ticket.status,
           ticket.priority,
           ticket.tags.join(" "),
@@ -1166,7 +1195,7 @@ module Helpdesk
       overdue_marker = ticket.overdue? ? " overdue" : ""
       pinned_marker = ticket.pinned? ? " pinned" : ""
       archived_marker = ticket.archived? ? " archived" : ""
-      "##{ticket.id} [#{ticket.status}/#{ticket.priority}#{overdue_marker}#{pinned_marker}#{archived_marker}] #{ticket.title}#{ticket.tags.empty? ? '' : " ##{ticket.tags.join(' #')}"}"
+      "##{ticket.id} [#{ticket.ticket_type}/#{ticket.status}/#{ticket.priority}#{overdue_marker}#{pinned_marker}#{archived_marker}] #{ticket.title}#{ticket.tags.empty? ? '' : " ##{ticket.tags.join(' #')}"}"
     end
 
     def format_filter_options(options)
