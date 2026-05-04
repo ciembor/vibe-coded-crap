@@ -200,6 +200,9 @@ module Helpdesk
           workflow show
           workflow set TYPE STATUS [STATUS ...]
           workflow reset [TYPE|all]
+          workflow transitions show TYPE
+          workflow transitions set TYPE FROM STATUS [STATUS ...]
+          workflow transitions reset [TYPE|all]
           duplicates [--ticket ID]
           dashboard
           stats
@@ -278,6 +281,7 @@ module Helpdesk
       show_related_tickets(ticket)
       show_hierarchy(ticket)
       show_dependencies(ticket)
+      show_workflow_transitions(ticket)
       puts "Created: #{ticket.created_at}"
       puts "Updated: #{ticket.updated_at}"
       puts "Description:"
@@ -1537,8 +1541,10 @@ module Helpdesk
         reload_ticket_workflows!
         log_action("workflow.reset", "workflow #{target}", workflow: target)
         puts target == "all" ? "Reset all workflows." : "Reset workflow #{target}."
+      when "transitions"
+        manage_workflow_transitions(args.drop(1))
       else
-        puts "Usage: workflow show | workflow set TYPE STATUS [STATUS ...] | workflow reset [TYPE|all]"
+        puts "Usage: workflow show | workflow set TYPE STATUS [STATUS ...] | workflow reset [TYPE|all] | workflow transitions show TYPE | workflow transitions set TYPE FROM STATUS [STATUS ...] | workflow transitions reset [TYPE|all]"
       end
     rescue ArgumentError => e
       puts e.message
@@ -1607,12 +1613,77 @@ module Helpdesk
       end
 
       workflows.each do |workflow|
+        transitions = format_workflow_transitions(workflow["transitions"] || {})
         puts "#{workflow["ticket_type"]}: #{workflow["statuses"].join(", ")} (initial: #{workflow["initial_status"]})"
+        puts "  transitions: #{transitions}"
       end
+    end
+
+    def manage_workflow_transitions(args)
+      action = args[0]
+      case action
+      when "show"
+        ticket_type = args[1].to_s.strip
+        if ticket_type.empty?
+          puts "Usage: workflow transitions show TYPE"
+          return
+        end
+
+        workflow = @workflows.find(ticket_type)
+        return puts "Workflow not found." unless workflow
+
+        puts "#{workflow["ticket_type"]}:"
+        puts "  #{format_workflow_transitions(workflow["transitions"] || {})}"
+      when "set"
+        return unless require_permission!(:admin)
+
+        ticket_type = args[1].to_s.strip
+        from_status = args[2].to_s.strip
+        next_statuses = args.drop(3)
+        if ticket_type.empty? || from_status.empty? || next_statuses.empty?
+          puts "Usage: workflow transitions set TYPE FROM STATUS [STATUS ...]"
+          return
+        end
+
+        workflow = @workflows.set_transition(ticket_type, from_status, next_statuses)
+        return puts "Workflow not found." unless workflow
+
+        reload_ticket_workflows!
+        log_action("workflow.transitions_set", "workflow #{ticket_type}", from: from_status, to: next_statuses)
+        puts "Updated transitions for workflow #{ticket_type}."
+      when "reset"
+        return unless require_permission!(:admin)
+
+        target = args[1].to_s.strip
+        target = "all" if target.empty?
+        result = @workflows.reset_transitions(target)
+        return puts "Workflow not found." if result.nil? && target != "all"
+
+        reload_ticket_workflows!
+        log_action("workflow.transitions_reset", "workflow #{target}", workflow: target)
+        puts target == "all" ? "Reset workflow transitions for all workflows." : "Reset workflow transitions for #{target}."
+      else
+        puts "Usage: workflow transitions show TYPE | workflow transitions set TYPE FROM STATUS [STATUS ...] | workflow transitions reset [TYPE|all]"
+      end
+    rescue ArgumentError => e
+      puts e.message
     end
 
     def reload_ticket_workflows!
       Ticket.workflows = @workflows.to_workflow_hash
+    end
+
+    def show_workflow_transitions(ticket)
+      next_statuses = Ticket.workflow_next_statuses_for(ticket.ticket_type, ticket.status)
+      puts "Next statuses: #{next_statuses.empty? ? 'none' : next_statuses.join(', ')}"
+    end
+
+    def format_workflow_transitions(transitions)
+      return "none" if transitions.empty?
+
+      transitions.sort_by { |from_status, _| from_status.to_s }.map do |from_status, next_statuses|
+        "#{from_status} -> #{Array(next_statuses).join(', ')}"
+      end.join(" | ")
     end
 
     def show_sort_rules

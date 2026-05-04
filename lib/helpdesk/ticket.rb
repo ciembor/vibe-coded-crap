@@ -69,6 +69,14 @@ module Helpdesk
         workflow_for(ticket_type)["initial_status"].to_s
       end
 
+      def workflow_transitions_for(ticket_type)
+        workflow_for(ticket_type)["transitions"] || {}
+      end
+
+      def workflow_next_statuses_for(ticket_type, status)
+        Array(workflow_transitions_for(ticket_type)[status.to_s])
+      end
+
       private
 
       def normalize_sla_rules(rules)
@@ -139,17 +147,48 @@ module Helpdesk
           unless statuses.include?(initial_status)
             raise ArgumentError, "workflow #{ticket_type} initial status must be in statuses"
           end
+          transitions = normalize_workflow_transitions(
+            workflow["transitions"] || workflow[:transitions] || default_workflow_transitions(statuses),
+            statuses: statuses,
+            ticket_type: ticket_type
+          )
 
           normalized[ticket_type] = {
             "name" => (workflow["name"] || workflow[:name] || ticket_type.tr("_", " ").capitalize).to_s,
             "statuses" => statuses,
-            "initial_status" => initial_status
+            "initial_status" => initial_status,
+            "transitions" => transitions
           }
         end
       end
 
       def normalize_workflow_statuses(statuses)
         Array(statuses).map { |status| normalize_workflow_status(status) }.reject(&:empty?).uniq
+      end
+
+      def normalize_workflow_transitions(transitions, statuses:, ticket_type:)
+        source = transitions.is_a?(Hash) ? transitions : {}
+        source.each_with_object({}) do |(from_status, next_statuses), normalized|
+          from_status = normalize_workflow_status(from_status)
+          next if from_status.empty?
+
+          normalized[from_status] = normalize_workflow_next_statuses(next_statuses, allowed_statuses: statuses, ticket_type: ticket_type)
+        end
+      end
+
+      def normalize_workflow_next_statuses(next_statuses, allowed_statuses:, ticket_type:)
+        normalized = Array(next_statuses).map { |status| normalize_workflow_status(status) }.reject(&:empty?).uniq
+        invalid = normalized - allowed_statuses
+        raise ArgumentError, "workflow #{ticket_type} has invalid transition targets: #{invalid.join(', ')}" if invalid.any?
+
+        normalized
+      end
+
+      def default_workflow_transitions(statuses)
+        statuses.each_cons(2).each_with_object({}) do |(from_status, to_status), normalized|
+          normalized[from_status] ||= []
+          normalized[from_status] << to_status
+        end
       end
 
       def normalize_workflow_status(status)

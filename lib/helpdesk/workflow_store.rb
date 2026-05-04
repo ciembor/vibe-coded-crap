@@ -26,7 +26,8 @@ module Helpdesk
         ticket_type,
         "name" => attrs[:name] || attrs["name"] || ticket_type.to_s,
         "statuses" => attrs[:statuses] || attrs["statuses"] || [],
-        "initial_status" => attrs[:initial_status] || attrs["initial_status"]
+        "initial_status" => attrs[:initial_status] || attrs["initial_status"],
+        "transitions" => attrs[:transitions] || attrs["transitions"]
       )
 
       index = rows.index { |row| row["ticket_type"].to_s == workflow["ticket_type"] }
@@ -52,12 +53,50 @@ module Helpdesk
       save!(rows.empty? ? default_rows : rows)
     end
 
+    def transitions_for(ticket_type)
+      find(ticket_type).to_h.fetch("transitions", {})
+    end
+
+    def set_transition(ticket_type, from_status, next_statuses)
+      rows = load_data
+      index = rows.index { |row| row["ticket_type"].to_s == ticket_type.to_s }
+      return nil unless index
+
+      workflow = normalize_workflow(
+        ticket_type,
+        rows[index].merge("transitions" => (rows[index]["transitions"] || {}).merge(from_status.to_s => next_statuses))
+      )
+      rows[index] = workflow
+      save!(rows)
+      workflow
+    end
+
+    def reset_transitions(ticket_type = nil)
+      rows = load_data
+      if ticket_type.nil? || ticket_type.to_s == "all"
+        rows.map! do |row|
+          normalize_workflow(row["ticket_type"], row.merge("transitions" => default_transitions(row["statuses"] || [])))
+        end
+        save!(rows)
+        return rows
+      end
+
+      ticket_type = ticket_type.to_s
+      index = rows.index { |row| row["ticket_type"].to_s == ticket_type }
+      return nil unless index
+
+      rows[index] = normalize_workflow(ticket_type, rows[index].merge("transitions" => default_transitions(rows[index]["statuses"] || [])))
+      save!(rows)
+      rows[index]
+    end
+
     def to_workflow_hash
       all.each_with_object({}) do |row, normalized|
         normalized[row["ticket_type"]] = {
           "name" => row["name"],
           "statuses" => row["statuses"],
-          "initial_status" => row["initial_status"]
+          "initial_status" => row["initial_status"],
+          "transitions" => row["transitions"] || {}
         }
       end
     end
@@ -88,13 +127,35 @@ module Helpdesk
       initial_status = statuses.first if initial_status.empty?
       raise ArgumentError, "workflow #{ticket_type} must include closed" unless statuses.include?("closed")
       raise ArgumentError, "workflow #{ticket_type} initial status must be in statuses" unless statuses.include?(initial_status)
+      transitions = normalize_transitions(attrs["transitions"] || attrs[:transitions] || default_transitions(statuses), statuses, ticket_type)
 
       {
         "ticket_type" => ticket_type,
         "name" => (attrs["name"] || attrs[:name] || ticket_type.tr("_", " ").capitalize).to_s.strip,
         "statuses" => statuses,
-        "initial_status" => initial_status
+        "initial_status" => initial_status,
+        "transitions" => transitions
       }
+    end
+
+    def default_transitions(statuses)
+      statuses.each_cons(2).each_with_object({}) do |(from_status, to_status), normalized|
+        normalized[from_status] ||= []
+        normalized[from_status] << to_status
+      end
+    end
+
+    def normalize_transitions(transitions, statuses, ticket_type)
+      source = transitions.is_a?(Hash) ? transitions : {}
+      source.each_with_object({}) do |(from_status, next_statuses), normalized|
+        from_status = from_status.to_s.strip
+        next if from_status.empty?
+        raise ArgumentError, "workflow #{ticket_type} has invalid transition source: #{from_status}" unless statuses.include?(from_status)
+
+        normalized[from_status] = Array(next_statuses).map { |status| status.to_s.strip }.reject(&:empty?).uniq
+        invalid = normalized[from_status] - statuses
+        raise ArgumentError, "workflow #{ticket_type} has invalid transition targets: #{invalid.join(', ')}" if invalid.any?
+      end
     end
 
     def load_data
