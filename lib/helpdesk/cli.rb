@@ -67,6 +67,7 @@ module Helpdesk
         when "escalations" then escalations
         when "escalate" then escalate_ticket(args)
         when "analytics" then analytics(args)
+        when "report" then report(args)
         when "remind" then remind(args)
         when "reminders" then reminders
         when "dashboard" then dashboard
@@ -157,6 +158,7 @@ module Helpdesk
           escalation rules set PRIORITY ENABLED TRIGGER TARGET_ROLE
           escalation rules reset [PRIORITY|all]
           analytics [summary|status|aging|trend]
+          report daily [DATE]
           dashboard
           stats
           export csv [PATH]
@@ -1226,6 +1228,16 @@ module Helpdesk
       end
     end
 
+    def report(args)
+      action = args[0]
+      case action
+      when "daily", nil
+        report_daily(args[1])
+      else
+        puts "Usage: report daily [DATE]"
+      end
+    end
+
     def export(args)
       format = args[0]
       case format
@@ -1858,6 +1870,43 @@ module Helpdesk
       end
     end
 
+    def report_daily(date_string = nil)
+      date = parse_report_date(date_string) || Date.today - 1
+      tickets = @store.all
+      created = tickets.count { |ticket| parse_date(ticket.created_at) == date }
+      closed = tickets.count { |ticket| parse_date(ticket.closed_at) == date }
+      updated = tickets.count { |ticket| parse_date(ticket.updated_at) == date }
+      due_today = tickets.count { |ticket| parse_date(ticket.due_at) == date }
+      reminders_due = tickets.count { |ticket| parse_time(ticket.reminder_at)&.to_date == date }
+      esc_candidates = tickets.count { |ticket| ticket.escalation_needed? && parse_date(ticket.created_at) <= date }
+      sla_breaches = tickets.count { |ticket| ticket.sla_status == "breached" && parse_date(ticket.created_at) <= date }
+      open_tickets = open_ticket_scope(tickets)
+
+      puts "Daily summary report for #{date}"
+      puts "Created: #{created}"
+      puts "Closed: #{closed}"
+      puts "Updated: #{updated}"
+      puts "Open now: #{open_tickets.count}"
+      puts "Overdue now: #{tickets.count(&:overdue?)}"
+      puts "Due today: #{due_today}"
+      puts "Reminders due today: #{reminders_due}"
+      puts "Escalation candidates: #{esc_candidates}"
+      puts "SLA breaches: #{sla_breaches}"
+      puts "Top priorities:"
+      Ticket::PRIORITIES.each do |priority|
+        puts "  #{priority}: #{tickets.count { |ticket| ticket.priority == priority }}"
+      end
+      puts "Top tags:"
+      tag_counts = tickets.flat_map(&:tags).tally.sort_by { |tag, count| [-count, tag] }.first(5)
+      if tag_counts.empty?
+        puts "  none"
+      else
+        tag_counts.each do |tag, count|
+          puts "  #{tag}: #{count}"
+        end
+      end
+    end
+
     def open_ticket_scope(tickets)
       tickets.select { |ticket| %w[open in_progress waiting].include?(ticket.status) }
     end
@@ -1894,6 +1943,22 @@ module Helpdesk
     end
 
     def parse_date(value)
+      return nil if value.to_s.strip.empty?
+
+      Date.parse(value.to_s)
+    rescue ArgumentError
+      nil
+    end
+
+    def parse_time(value)
+      return nil if value.to_s.strip.empty?
+
+      Time.parse(value.to_s).utc
+    rescue ArgumentError
+      nil
+    end
+
+    def parse_report_date(value)
       return nil if value.to_s.strip.empty?
 
       Date.parse(value.to_s)
