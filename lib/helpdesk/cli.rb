@@ -43,6 +43,7 @@ module Helpdesk
         when "attach" then manage_attachments(args)
         when "tag" then manage_tags(args)
         when "search" then search(args)
+        when "activity" then activity(args)
         when "overdue" then overdue
         when "remind" then remind(args)
         when "reminders" then reminders
@@ -97,6 +98,7 @@ module Helpdesk
           tag add ID [ID ...] TAG
           tag remove ID [ID ...] TAG
           search QUERY
+          activity [--last N] [--ticket ID]
           dashboard
           stats
           export csv [PATH]
@@ -190,6 +192,15 @@ module Helpdesk
           ].compact.join(" | ")
           details = " | #{details}" unless details.empty?
           puts "  [#{attachment["id"]}] #{attachment["name"]}#{details} (by #{attachment["uploaded_by"]} @ #{attachment["created_at"]})"
+        end
+      end
+      activity = activity_entries_for_ticket(ticket.id)
+      puts "Activity:"
+      if activity.empty?
+        puts "  none"
+      else
+        activity.each do |entry|
+          puts "  #{format_activity_entry(entry)}"
         end
       end
     end
@@ -707,6 +718,21 @@ module Helpdesk
       end
     end
 
+    def activity(args)
+      options = parse_activity_options(args)
+      entries = @audit_log.all.select { |entry| activity_visible?(entry) }
+      entries = entries.select { |entry| activity_entry_for_ticket?(entry, options[:ticket]) } if options[:ticket]
+      entries = entries.last(options[:last]) if options[:last]
+      if entries.empty?
+        puts "No activity."
+        return
+      end
+
+      entries.each do |entry|
+        puts format_activity_entry(entry)
+      end
+    end
+
     def prompt(label, default = nil)
       if default.nil? || default.empty?
         print "#{label}: "
@@ -1004,6 +1030,108 @@ module Helpdesk
         end
       end
       options
+    end
+
+    def parse_activity_options(args)
+      options = { last: 10 }
+      idx = 0
+      while idx < args.length
+        case args[idx]
+        when "--last"
+          options[:last] = args[idx + 1].to_i
+          idx += 2
+        when "--ticket"
+          options[:ticket] = args[idx + 1].to_i
+          idx += 2
+        else
+          idx += 1
+        end
+      end
+      options
+    end
+
+    def activity_visible?(entry)
+      action = entry["action"].to_s
+      action.start_with?("ticket.") ||
+        action.start_with?("reminder.") ||
+        action.start_with?("notification.") ||
+        action.start_with?("user.") ||
+        action == "tickets.import"
+    end
+
+    def activity_entries_for_ticket(ticket_id)
+      @audit_log.all.select do |entry|
+        activity_visible?(entry) && activity_entry_for_ticket?(entry, ticket_id)
+      end.last(5)
+    end
+
+    def activity_entry_for_ticket?(entry, ticket_id)
+      return false if ticket_id.nil?
+
+      entry["subject"].to_s.match?(/\bticket ##{Regexp.escape(ticket_id.to_s)}\b/)
+    end
+
+    def format_activity_entry(entry)
+      action = entry["action"].to_s
+      subject = entry["subject"].to_s
+      actor = entry["actor"].to_s
+      created_at = entry["created_at"].to_s
+
+      label =
+        case action
+        when "ticket.create"
+          "created #{subject}"
+        when "ticket.update"
+          "updated #{subject}"
+        when "ticket.delete"
+          "deleted #{subject}"
+        when "ticket.close"
+          "closed #{subject}"
+        when "ticket.status"
+          "changed #{subject} to #{entry.dig("details", "status")}"
+        when "ticket.comment"
+          "commented on #{subject}"
+        when "ticket.note"
+          "added an internal note to #{subject}"
+        when "ticket.watch_add"
+          "added watcher to #{subject}"
+        when "ticket.watch_remove"
+          "removed watcher from #{subject}"
+        when "ticket.attach_add"
+          "added attachment to #{subject}"
+        when "ticket.attach_remove"
+          "removed attachment from #{subject}"
+        when "ticket.tag.add"
+          "added tag to #{subject}"
+        when "ticket.tag.remove"
+          "removed tag from #{subject}"
+        when "reminder.set"
+          "set a reminder on #{subject}"
+        when "reminder.clear"
+          "cleared a reminder on #{subject}"
+        when "reminder.repeat_set"
+          "set a repeating reminder on #{subject}"
+        when "reminder.repeat_clear"
+          "cleared repeating reminder on #{subject}"
+        when "notification.email"
+          "sent email notification for #{subject}"
+        when "user.create"
+          "created #{subject}"
+        when "user.switch"
+          "switched to #{subject}"
+        when "user.role"
+          "changed role for #{subject}"
+        when "user.notification_preferences"
+          "updated notification preferences for #{subject}"
+        when "user.notification_suppression_rules"
+          "updated suppression rules for #{subject}"
+        when "tickets.import"
+          "imported tickets"
+        else
+          "#{action} #{subject}"
+        end
+
+      "#{created_at} #{actor} #{label}"
     end
 
     def require_permission!(kind)
