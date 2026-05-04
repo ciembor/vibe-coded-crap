@@ -1,4 +1,6 @@
 require "helpdesk/version"
+require "helpdesk/user"
+require "helpdesk/user_store"
 require "helpdesk/ticket"
 require "helpdesk/store"
 require "helpdesk/cli"

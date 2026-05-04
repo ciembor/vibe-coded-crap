@@ -4,11 +4,15 @@ require "csv"
 require "json"
 require "fileutils"
 require "helpdesk/store"
+require "helpdesk/user_store"
 
 module Helpdesk
   class CLI
     def initialize(store: Store.new)
       @store = store
+      @users = UserStore.new
+      seed_default_user
+      @current_user = @users.all.first
     end
 
     def run
@@ -41,6 +45,9 @@ module Helpdesk
         when "stats" then dashboard
         when "export" then export(args)
         when "import" then import(args)
+        when "users" then list_users
+        when "user" then manage_users(args)
+        when "whoami" then whoami
         when "exit", "quit" then break
         else
           puts "Unknown command: #{command}. Type 'help'."
@@ -51,7 +58,8 @@ module Helpdesk
     private
 
     def banner
-      "Helpdesk CLI - type 'help' for commands"
+      current = @current_user ? " (current user: #{@current_user.name})" : ""
+      "Helpdesk CLI#{current} - type 'help' for commands"
     end
 
     def print_help
@@ -80,6 +88,10 @@ module Helpdesk
           export csv [PATH]
           export json [PATH]
           import json [PATH]
+          users
+          user add
+          user switch ID
+          whoami
           exit
       HELP
     end
@@ -216,7 +228,7 @@ module Helpdesk
 
       body = args.drop(1).join(" ")
       body = prompt("Comment") if body.strip.empty?
-      ticket.add_comment(body: body, author: prompt("Author", "agent"))
+      ticket.add_comment(body: body, author: prompt("Author", current_user_name))
       @store.save_ticket(ticket)
       puts "Added comment to ticket ##{id}."
     end
@@ -383,6 +395,49 @@ module Helpdesk
       puts e.message
     end
 
+    def list_users
+      users = @users.all
+      if users.empty?
+        puts "No users found."
+        return
+      end
+
+      users.each do |user|
+        marker = @current_user && user.id.to_i == @current_user.id.to_i ? " *" : ""
+        puts "##{user.id} #{user.display_name}#{marker}"
+      end
+    end
+
+    def manage_users(args)
+      action = args[0]
+      case action
+      when "add"
+        name = prompt("Name")
+        email = prompt("Email", "")
+        user = @users.create(name: name, email: email)
+        @current_user ||= user
+        puts "Created user ##{user.id}."
+      when "switch"
+        user = @users.find(required_id(args.drop(1)))
+        return puts "User not found." unless user
+
+        @current_user = user
+        puts "Switched to #{user.display_name}."
+      else
+        puts "Usage: user add | user switch ID"
+      end
+    rescue ArgumentError => e
+      puts e.message
+    end
+
+    def whoami
+      if @current_user
+        puts "Current user: ##{@current_user.id} #{@current_user.display_name}"
+      else
+        puts "No current user."
+      end
+    end
+
     def prompt(label, default = nil)
       if default.nil? || default.empty?
         print "#{label}: "
@@ -505,6 +560,16 @@ module Helpdesk
       raise ArgumentError, "Usage requires an ID" if id.nil? || id.strip.empty?
 
       id.to_i
+    end
+
+    def current_user_name
+      @current_user ? @current_user.name : "agent"
+    end
+
+    def seed_default_user
+      return unless @users.all.empty?
+
+      @users.create(name: "agent", email: "")
     end
   end
 end
