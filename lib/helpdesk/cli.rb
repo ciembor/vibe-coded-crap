@@ -4,6 +4,7 @@ require "csv"
 require "json"
 require "fileutils"
 require "helpdesk/audit_log"
+require "helpdesk/escalation_rule_store"
 require "helpdesk/store"
 require "helpdesk/sla_rule_store"
 require "helpdesk/template_store"
@@ -14,9 +15,11 @@ module Helpdesk
     def initialize(store: Store.new)
       @store = store
       @audit_log = AuditLog.new
+      @escalation_rules = EscalationRuleStore.new
       @sla_rules = SlaRuleStore.new
       @templates = TemplateStore.new
       @users = UserStore.new
+      @escalation_rules.reload_ticket_rules!
       @sla_rules.reload_ticket_rules!
       seed_default_user
       @current_user = @users.all.first
@@ -60,6 +63,8 @@ module Helpdesk
         when "activity" then activity(args)
         when "overdue" then overdue
         when "sla" then manage_sla(args)
+        when "escalation" then manage_escalation(args)
+        when "escalations" then escalations
         when "remind" then remind(args)
         when "reminders" then reminders
         when "dashboard" then dashboard
@@ -143,6 +148,10 @@ module Helpdesk
           sla rules show
           sla rules set PRIORITY WARNING_DAYS BREACH_DAYS
           sla rules reset [PRIORITY|all]
+          escalations
+          escalation rules show
+          escalation rules set PRIORITY ENABLED TRIGGER TARGET_ROLE
+          escalation rules reset [PRIORITY|all]
           dashboard
           stats
           export csv [PATH]
@@ -201,6 +210,7 @@ module Helpdesk
       puts "Reminder repeat: #{ticket.reminder_repeat || 'none'}"
       puts "Reminder due: #{ticket.reminder_due? ? 'yes' : 'no'}"
       puts "SLA: #{format_sla_status(ticket)}"
+      puts "Escalation: #{format_escalation_status(ticket)}"
       puts "Tags: #{ticket.tags.join(", ")}"
       puts "Pinned: #{ticket.pinned? ? 'yes' : 'no'}" if visibility[:pinned]
       puts "Pinned at: #{ticket.pinned_at || 'none'}" if visibility[:pinned]
@@ -1144,6 +1154,7 @@ module Helpdesk
       tickets = @store.all
       counts = tickets.group_by(&:status).transform_values(&:count)
       priority_counts = tickets.group_by(&:priority).transform_values(&:count)
+      escalation_count = tickets.count(&:escalation_needed?)
       sla_warning_count = tickets.count { |ticket| ticket.sla_status == "warning" }
       sla_breach_count = tickets.count { |ticket| ticket.sla_status == "breached" }
       recent_tickets = tickets.sort_by { |ticket| ticket.updated_at.to_s }.reverse.take(5)
@@ -1160,6 +1171,7 @@ module Helpdesk
       puts "Closed: #{counts.fetch("closed", 0)}"
       puts "Overdue: #{tickets.count(&:overdue?)}"
       puts "Due reminders: #{tickets.count(&:reminder_due?)}"
+      puts "Escalations needed: #{escalation_count}"
       puts "SLA warnings: #{sla_warning_count}"
       puts "SLA breaches: #{sla_breach_count}"
       puts "Total comments: #{tickets.sum { |ticket| ticket.comments.count }}"
@@ -1447,11 +1459,12 @@ module Helpdesk
                    when "breached" then " sla_breached"
                    else ""
                    end
+      escalation_marker = ticket.escalation_needed? ? " escalate" : ""
       pinned_marker = ticket.pinned? ? " pinned" : ""
       archived_marker = ticket.archived? ? " archived" : ""
       merged_marker = ticket.merged? ? " merged" : ""
       merged_from_marker = ticket.merged_from_ids.empty? ? "" : " merged_from:#{ticket.merged_from_ids.join(',')}"
-      "##{ticket.id} [#{ticket.ticket_type}/#{ticket.status}/#{ticket.priority}#{overdue_marker}#{sla_marker}#{pinned_marker}#{archived_marker}#{merged_marker}#{merged_from_marker}] #{ticket.title}#{ticket.tags.empty? ? '' : " ##{ticket.tags.join(' #')}"}"
+      "##{ticket.id} [#{ticket.ticket_type}/#{ticket.status}/#{ticket.priority}#{overdue_marker}#{sla_marker}#{escalation_marker}#{pinned_marker}#{archived_marker}#{merged_marker}#{merged_from_marker}] #{ticket.title}#{ticket.tags.empty? ? '' : " ##{ticket.tags.join(' #')}"}"
     end
 
     def format_sla_status(ticket)
@@ -1471,6 +1484,15 @@ module Helpdesk
       else
         "none"
       end
+    end
+
+    def format_escalation_status(ticket)
+      rule = ticket.escalation_rule
+      return "none" unless rule
+      return "disabled" unless rule[:enabled]
+      return "needed (trigger #{rule[:trigger]}, target #{rule[:target_role]})" if ticket.escalation_needed?
+
+      "none"
     end
 
     def format_filter_options(options)
@@ -1576,6 +1598,72 @@ module Helpdesk
       end
     rescue ArgumentError => e
       puts e.message
+    end
+
+    def manage_escalation(args)
+      action = args[0]
+      case action
+      when nil
+        escalations
+      when "rules"
+        manage_escalation_rules(args.drop(1))
+      else
+        puts "Usage: escalation | escalation rules show | escalation rules set PRIORITY ENABLED TRIGGER TARGET_ROLE | escalation rules reset [PRIORITY|all]"
+      end
+    end
+
+    def manage_escalation_rules(args)
+      action = args[0]
+      case action
+      when nil, "show"
+        show_escalation_rules
+      when "set"
+        return unless require_permission!(:admin)
+
+        priority = args[1]
+        enabled = args[2]
+        trigger = args[3]
+        target_role = args[4]
+        return puts "Usage: escalation rules set PRIORITY ENABLED TRIGGER TARGET_ROLE" if [priority, enabled, trigger, target_role].any? { |value| value.to_s.strip.empty? }
+
+        rules = @escalation_rules.set(priority, enabled: enabled, trigger: trigger, target_role: target_role)
+        @escalation_rules.reload_ticket_rules!
+        log_action("escalation.rules_set", "escalation", priority: priority.to_s.strip.downcase, rules: rules[priority.to_s.strip.downcase])
+        puts "Updated escalation rule for #{priority}."
+      when "reset"
+        return unless require_permission!(:admin)
+
+        priority = args[1]
+        rules = @escalation_rules.reset(priority)
+        @escalation_rules.reload_ticket_rules!
+        log_action("escalation.rules_reset", "escalation", priority: priority.to_s.strip.empty? ? "all" : priority.to_s.strip.downcase, rules: rules)
+        normalized_priority = priority.to_s.strip.downcase
+        puts normalized_priority.empty? || normalized_priority == "all" ? "Reset all escalation rules." : "Reset escalation rule for #{priority}."
+      else
+        puts "Usage: escalation rules show | escalation rules set PRIORITY ENABLED TRIGGER TARGET_ROLE | escalation rules reset [PRIORITY|all]"
+      end
+    rescue ArgumentError => e
+      puts e.message
+    end
+
+    def show_escalation_rules
+      rules = @escalation_rules.all
+      rules.each do |priority, rule|
+        puts "#{priority}: enabled #{rule["enabled"]}, trigger #{rule["trigger"]}, target #{rule["target_role"]}"
+      end
+    end
+
+    def escalations
+      tickets = @store.all.select(&:escalation_needed?)
+      if tickets.empty?
+        puts "No escalation candidates."
+        return
+      end
+
+      tickets.each do |ticket|
+        puts format_ticket_row(ticket)
+        puts "  Escalation: #{format_escalation_status(ticket)}"
+      end
     end
 
     def show_sla_rules

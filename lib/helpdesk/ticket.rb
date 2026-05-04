@@ -11,6 +11,12 @@ module Helpdesk
       "high" => { warning_days: 3, breach_days: 5 },
       "urgent" => { warning_days: 1, breach_days: 2 }
     }.freeze
+    DEFAULT_ESCALATION_RULES = {
+      "low" => { enabled: false, trigger: "sla_breached", target_role: "admin" },
+      "medium" => { enabled: true, trigger: "sla_breached", target_role: "admin" },
+      "high" => { enabled: true, trigger: "sla_warning", target_role: "admin" },
+      "urgent" => { enabled: true, trigger: "overdue", target_role: "admin" }
+    }.freeze
 
     class << self
       def sla_rules
@@ -25,6 +31,18 @@ module Helpdesk
         sla_rules[priority.to_s]
       end
 
+      def escalation_rules
+        @escalation_rules ||= DEFAULT_ESCALATION_RULES
+      end
+
+      def escalation_rules=(rules)
+        @escalation_rules = normalize_escalation_rules(rules)
+      end
+
+      def escalation_rule_for(priority)
+        escalation_rules[priority.to_s]
+      end
+
       private
 
       def normalize_sla_rules(rules)
@@ -36,6 +54,43 @@ module Helpdesk
             breach_days: rule.fetch("breach_days", rule.fetch(:breach_days, DEFAULT_SLA_RULES[priority][:breach_days])).to_i
           }
         end
+      end
+
+      def normalize_escalation_rules(rules)
+        source = rules.is_a?(Hash) ? rules : {}
+        PRIORITIES.each_with_object({}) do |priority, normalized|
+          rule = source[priority] || source[priority.to_sym] || DEFAULT_ESCALATION_RULES[priority]
+          normalized[priority] = {
+            enabled: normalize_boolean(rule.fetch("enabled", rule.fetch(:enabled, DEFAULT_ESCALATION_RULES[priority][:enabled]))),
+            trigger: normalize_escalation_trigger(rule.fetch("trigger", rule.fetch(:trigger, DEFAULT_ESCALATION_RULES[priority][:trigger]))),
+            target_role: normalize_escalation_target_role(rule.fetch("target_role", rule.fetch(:target_role, DEFAULT_ESCALATION_RULES[priority][:target_role])))
+          }
+        end
+      end
+
+      def normalize_boolean(value)
+        case value
+        when true, false
+          value
+        else
+          %w[true yes on 1].include?(value.to_s.strip.downcase)
+        end
+      end
+
+      def normalize_escalation_trigger(value)
+        value = value.to_s.strip.downcase
+        value = "sla_breached" if value.empty?
+        return value if %w[sla_warning sla_breached overdue].include?(value)
+
+        raise ArgumentError, "invalid escalation trigger: #{value}"
+      end
+
+      def normalize_escalation_target_role(value)
+        value = value.to_s.strip.downcase
+        value = "admin" if value.empty?
+        return value if %w[admin agent viewer].include?(value)
+
+        raise ArgumentError, "invalid escalation target role: #{value}"
       end
     end
 
@@ -385,6 +440,50 @@ module Helpdesk
 
     def sla_rule
       self.class.sla_rule_for(priority)
+    end
+
+    def escalation_rule
+      self.class.escalation_rule_for(priority)
+    end
+
+    def escalation_status(reference_time = Time.now.utc)
+      return "none" if closed? || status == "resolved" || archived?
+
+      rule = escalation_rule
+      return "none" unless rule && rule[:enabled]
+
+      return "needed" if escalation_triggered?(rule, reference_time)
+
+      "none"
+    end
+
+    def escalation_needed?
+      escalation_status == "needed"
+    end
+
+    def escalation_target_role
+      rule = escalation_rule
+      rule ? rule[:target_role] : nil
+    end
+
+    def escalation_trigger
+      rule = escalation_rule
+      rule ? rule[:trigger] : nil
+    end
+
+    def escalation_triggered?(rule = escalation_rule, _reference_time = Time.now.utc)
+      return false unless rule
+
+      case rule[:trigger]
+      when "sla_warning"
+        sla_warning?
+      when "sla_breached"
+        sla_breached?
+      when "overdue"
+        overdue?
+      else
+        false
+      end
     end
 
     def reminder_due?
