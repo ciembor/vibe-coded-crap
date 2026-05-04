@@ -66,6 +66,7 @@ module Helpdesk
         when "escalation" then manage_escalation(args)
         when "escalations" then escalations
         when "escalate" then escalate_ticket(args)
+        when "analytics" then analytics(args)
         when "remind" then remind(args)
         when "reminders" then reminders
         when "dashboard" then dashboard
@@ -155,6 +156,7 @@ module Helpdesk
           escalation rules show
           escalation rules set PRIORITY ENABLED TRIGGER TARGET_ROLE
           escalation rules reset [PRIORITY|all]
+          analytics [summary|status|aging|trend]
           dashboard
           stats
           export csv [PATH]
@@ -1208,6 +1210,22 @@ module Helpdesk
 
     alias stats dashboard
 
+    def analytics(args)
+      action = args[0]
+      case action
+      when nil, "summary"
+        analytics_summary
+      when "status"
+        analytics_status
+      when "aging"
+        analytics_aging
+      when "trend"
+        analytics_trend
+      else
+        puts "Usage: analytics [summary|status|aging|trend]"
+      end
+    end
+
     def export(args)
       format = args[0]
       case format
@@ -1757,6 +1775,130 @@ module Helpdesk
         puts format_ticket_row(ticket)
         puts "  SLA: #{format_sla_status(ticket)}"
       end
+    end
+
+    def analytics_summary
+      tickets = @store.all
+      open_tickets = open_ticket_scope(tickets)
+      closed_tickets = tickets.select(&:closed?)
+
+      puts "Analytics"
+      puts "Total tickets: #{tickets.count}"
+      puts "Open tickets: #{open_tickets.count}"
+      puts "Closed tickets: #{closed_tickets.count}"
+      puts "Overdue tickets: #{tickets.count(&:overdue?)}"
+      puts "Escalation candidates: #{tickets.count(&:escalation_needed?)}"
+      puts "SLA breaches: #{tickets.count { |ticket| ticket.sla_status == 'breached' }}"
+      puts "Average open age (days): #{format_average_days(open_tickets, :created_at)}"
+      puts "Average time to close (days): #{format_average_days(closed_tickets, :closed_at)}"
+      puts "Total comments: #{tickets.sum { |ticket| ticket.comments.count }}"
+    end
+
+    def analytics_status
+      tickets = @store.all
+      counts = tickets.group_by(&:status).transform_values(&:count)
+      total = tickets.count
+
+      puts "Status analytics"
+      Ticket::STATUSES.each do |status|
+        count = counts.fetch(status, 0)
+        percentage = total.zero? ? 0 : ((count.to_f / total) * 100).round(1)
+        puts "#{status}: #{count} (#{percentage}%)"
+      end
+      puts "Archived: #{tickets.count(&:archived?)}"
+      puts "Pinned: #{tickets.count(&:pinned?)}"
+    end
+
+    def analytics_aging
+      tickets = open_ticket_scope(@store.all)
+      if tickets.empty?
+        puts "No open tickets."
+        return
+      end
+
+      buckets = {
+        "0-2 days" => 0,
+        "3-7 days" => 0,
+        "8-14 days" => 0,
+        "15+ days" => 0
+      }
+      tickets.each do |ticket|
+        age = ticket_age_days(ticket)
+        next if age.nil?
+
+        case age
+        when 0..2 then buckets["0-2 days"] += 1
+        when 3..7 then buckets["3-7 days"] += 1
+        when 8..14 then buckets["8-14 days"] += 1
+        else buckets["15+ days"] += 1
+        end
+      end
+
+      oldest_ticket = tickets.max_by { |ticket| ticket_age_days(ticket) || -1 }
+      puts "Aging analytics"
+      puts "Average open age (days): #{format_average_days(tickets, :created_at)}"
+      puts "Oldest open ticket: ##{oldest_ticket.id} #{oldest_ticket.title}"
+      puts "Aging buckets:"
+      buckets.each do |label, count|
+        puts "  #{label}: #{count}"
+      end
+    end
+
+    def analytics_trend
+      tickets = @store.all
+      today = Date.today
+      days = 7
+
+      puts "Trend analytics"
+      days.downto(1) do |offset|
+        date = today - offset
+        created = tickets.count { |ticket| parse_date(ticket.created_at) == date }
+        closed = tickets.count { |ticket| parse_date(ticket.closed_at) == date }
+        puts "#{date}: created #{created}, closed #{closed}"
+      end
+    end
+
+    def open_ticket_scope(tickets)
+      tickets.select { |ticket| %w[open in_progress waiting].include?(ticket.status) }
+    end
+
+    def format_average_days(tickets, field)
+      values =
+        case field
+        when :created_at
+          tickets.map { |ticket| ticket_age_days(ticket) }.compact
+        when :closed_at
+          tickets.map { |ticket| ticket_close_duration_days(ticket) }.compact
+        else
+          []
+        end
+
+      return "n/a" if values.empty?
+
+      (values.sum.to_f / values.count).round(1)
+    end
+
+    def ticket_age_days(ticket, reference_date = Date.today)
+      date = parse_date(ticket.created_at)
+      return nil unless date
+
+      (reference_date - date).to_i
+    end
+
+    def ticket_close_duration_days(ticket)
+      created = parse_date(ticket.created_at)
+      closed = parse_date(ticket.closed_at)
+      return nil unless created && closed
+
+      (closed - created).to_i
+    end
+
+    def parse_date(value)
+      return nil if value.to_s.strip.empty?
+
+      Date.parse(value.to_s)
+    rescue ArgumentError
+      nil
     end
 
     def reminders
