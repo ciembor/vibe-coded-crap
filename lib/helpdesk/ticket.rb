@@ -6,7 +6,7 @@ module Helpdesk
     STATUSES = %w[open in_progress waiting resolved closed].freeze
     PRIORITIES = %w[low medium high urgent].freeze
 
-    attr_accessor :id, :title, :description, :status, :priority, :tags, :comments, :internal_notes, :watchers, :attachments, :pinned, :pinned_at, :archived, :archived_at, :created_at, :updated_at, :closed_at, :due_at, :reminder_at, :reminder_repeat
+    attr_accessor :id, :title, :description, :status, :priority, :tags, :comments, :internal_notes, :watchers, :attachments, :custom_fields, :pinned, :pinned_at, :archived, :archived_at, :created_at, :updated_at, :closed_at, :due_at, :reminder_at, :reminder_repeat
 
     def self.from_h(hash)
       ticket = new(
@@ -20,6 +20,7 @@ module Helpdesk
         internal_notes: hash["internal_notes"] || [],
         watchers: hash["watchers"] || [],
         attachments: hash["attachments"] || [],
+        custom_fields: hash["custom_fields"] || {},
         pinned: hash["pinned"],
         pinned_at: hash["pinned_at"],
         archived: hash["archived"],
@@ -35,7 +36,7 @@ module Helpdesk
       ticket
     end
 
-    def initialize(id: nil, title: "", description: "", status: "open", priority: "medium", tags: [], comments: [], internal_notes: [], watchers: [], attachments: [], pinned: false, pinned_at: nil, archived: false, archived_at: nil, created_at: nil, updated_at: nil, closed_at: nil, due_at: nil, reminder_at: nil, reminder_repeat: nil)
+    def initialize(id: nil, title: "", description: "", status: "open", priority: "medium", tags: [], comments: [], internal_notes: [], watchers: [], attachments: [], custom_fields: {}, pinned: false, pinned_at: nil, archived: false, archived_at: nil, created_at: nil, updated_at: nil, closed_at: nil, due_at: nil, reminder_at: nil, reminder_repeat: nil)
       @id = id
       @title = title
       @description = description
@@ -46,6 +47,7 @@ module Helpdesk
       @internal_notes = internal_notes.dup
       @watchers = watchers.dup
       @attachments = attachments.dup
+      @custom_fields = custom_fields
       @pinned = pinned
       @pinned_at = pinned_at
       @archived = archived
@@ -93,6 +95,7 @@ module Helpdesk
           "created_at" => attachment["created_at"] || attachment[:created_at] || Time.now.utc.iso8601
         }
       end
+      self.custom_fields = normalize_custom_fields(custom_fields)
       self.pinned = normalize_pinned(pinned)
       self.pinned_at = pinned? ? (pinned_at || Time.now.utc.iso8601) : nil
       self.archived = normalize_archived(archived)
@@ -123,6 +126,7 @@ module Helpdesk
           "created_at" => attachment["created_at"] || attachment[:created_at] || Time.now.utc.iso8601
         }
       end
+      self.custom_fields = normalize_custom_fields(attrs.fetch(:custom_fields, custom_fields))
       if attrs.key?(:pinned)
         self.pinned = !!attrs[:pinned]
         self.pinned_at = pinned? ? (attrs.fetch(:pinned_at, pinned_at) || Time.now.utc.iso8601) : nil
@@ -193,6 +197,22 @@ module Helpdesk
         "created_at" => Time.now.utc.iso8601
       }
       self.attachments = attachments.sort_by { |attachment| attachment["id"].to_i }
+      self.updated_at = Time.now.utc.iso8601
+    end
+
+    def set_custom_field(key, value)
+      key = key.to_s.strip
+      return if key.empty?
+
+      self.custom_fields = (custom_fields || {}).merge(key => value.to_s)
+      self.updated_at = Time.now.utc.iso8601
+    end
+
+    def remove_custom_field(key)
+      key = key.to_s.strip
+      return if key.empty?
+
+      self.custom_fields = (custom_fields || {}).reject { |existing_key, _| existing_key.to_s.casecmp?(key) }
       self.updated_at = Time.now.utc.iso8601
     end
 
@@ -314,6 +334,7 @@ module Helpdesk
         "internal_notes" => internal_notes,
         "watchers" => watchers,
         "attachments" => attachments,
+        "custom_fields" => custom_fields,
         "pinned" => pinned?,
         "pinned_at" => pinned_at,
         "archived" => archived?,
@@ -394,6 +415,16 @@ module Helpdesk
         false
       else
         %w[true yes on 1].include?(value.to_s.strip.downcase)
+      end
+    end
+
+    def normalize_custom_fields(value)
+      hash = value.is_a?(Hash) ? value : {}
+      hash.each_with_object({}) do |(key, val), normalized|
+        key = key.to_s.strip
+        next if key.empty?
+
+        normalized[key] = val.to_s
       end
     end
 

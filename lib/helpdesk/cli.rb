@@ -48,6 +48,7 @@ module Helpdesk
         when "searches" then list_saved_searches
         when "filter" then filter(args)
         when "filters" then list_favorite_filters
+        when "field" then manage_custom_fields(args)
         when "activity" then activity(args)
         when "overdue" then overdue
         when "remind" then remind(args)
@@ -117,6 +118,9 @@ module Helpdesk
           filter run NAME
           filter delete NAME
           filters
+          field set ID KEY VALUE
+          field remove ID KEY
+          field list ID
           activity [--last N] [--ticket ID]
           dashboard
           stats
@@ -220,6 +224,14 @@ module Helpdesk
           ].compact.join(" | ")
           details = " | #{details}" unless details.empty?
           puts "  [#{attachment["id"]}] #{attachment["name"]}#{details} (by #{attachment["uploaded_by"]} @ #{attachment["created_at"]})"
+        end
+      end
+      puts "Custom fields:"
+      if ticket.custom_fields.empty?
+        puts "  none"
+      else
+        ticket.custom_fields.each do |key, value|
+          puts "  #{key}: #{value}"
         end
       end
       activity = activity_entries_for_ticket(ticket.id)
@@ -547,6 +559,55 @@ module Helpdesk
       puts e.message
     end
 
+    def manage_custom_fields(args)
+      return unless require_permission!(:ticket_write)
+
+      action = args[0]
+      case action
+      when "set"
+        id = required_id(args.drop(1))
+        key = args[2]
+        value = args.drop(3).join(" ")
+        return puts "Usage: field set ID KEY VALUE" if key.to_s.strip.empty? || value.to_s.strip.empty?
+
+        ticket = @store.find(id)
+        return puts "Ticket not found." unless ticket
+
+        ticket.set_custom_field(key, value)
+        @store.save_ticket(ticket)
+        log_action("ticket.field_set", "ticket ##{id}", key: key, value: value)
+        puts "Set custom field #{key} on ticket ##{id}."
+      when "remove"
+        id = required_id(args.drop(1))
+        key = args[2]
+        return puts "Usage: field remove ID KEY" if key.to_s.strip.empty?
+
+        ticket = @store.find(id)
+        return puts "Ticket not found." unless ticket
+
+        ticket.remove_custom_field(key)
+        @store.save_ticket(ticket)
+        log_action("ticket.field_remove", "ticket ##{id}", key: key)
+        puts "Removed custom field #{key} from ticket ##{id}."
+      when "list"
+        id = required_id(args.drop(1))
+        ticket = @store.find(id)
+        return puts "Ticket not found." unless ticket
+
+        if ticket.custom_fields.empty?
+          puts "No custom fields."
+        else
+          ticket.custom_fields.each do |key, value|
+            puts "#{key}: #{value}"
+          end
+        end
+      else
+        puts "Usage: field set ID KEY VALUE | field remove ID KEY | field list ID"
+      end
+    rescue ArgumentError => e
+      puts e.message
+    end
+
     def manage_tags(args)
       return unless require_permission!(:ticket_write)
 
@@ -782,7 +843,8 @@ module Helpdesk
           ticket.priority,
           ticket.tags.join(" "),
           ticket.comments.map { |comment| comment["body"] }.join(" "),
-          ticket.attachments.map { |attachment| [attachment["name"], attachment["description"], attachment["content_type"]].join(" ") }.join(" ")
+          ticket.attachments.map { |attachment| [attachment["name"], attachment["description"], attachment["content_type"]].join(" ") }.join(" "),
+          ticket.custom_fields.map { |key, value| "#{key} #{value}" }.join(" ")
         ].join(" ").downcase
         haystack.include?(query)
       end
