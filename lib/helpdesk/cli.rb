@@ -17,6 +17,7 @@ module Helpdesk
   class CLI
     API_RATE_LIMIT = 5
     API_RATE_WINDOW_SECONDS = 60
+    API_CACHE_TTL_SECONDS = 30
 
     def initialize(store: Store.new)
       @store = store
@@ -30,6 +31,7 @@ module Helpdesk
       @webhooks = WebhookStore.new
       @api_rate_limit = API_RATE_LIMIT
       @api_rate_window_seconds = API_RATE_WINDOW_SECONDS
+      @api_response_cache = {}
       @escalation_rules.reload_ticket_rules!
       @sla_rules.reload_ticket_rules!
       seed_default_user
@@ -1787,12 +1789,16 @@ module Helpdesk
       payload = parse_api_body(body)
       response =
         if method == "GET" && path == "/tickets"
-          { status: 200, data: @store.all.map { |ticket| api_ticket(ticket) } }
+          cached_api_response([@current_user&.id, method, path, body]) do
+            { status: 200, data: @store.all.map { |ticket| api_ticket(ticket) } }
+          end
         elsif method == "GET" && path.match?(%r{\A/tickets/\d+\z})
-          ticket = @store.find(path.split("/").last)
-          return puts(api_json_response(404, error: "Ticket not found.")) unless ticket
+          cached_api_response([@current_user&.id, method, path, body]) do
+            ticket = @store.find(path.split("/").last)
+            return { status: 404, error: "Ticket not found." } unless ticket
 
-          { status: 200, data: api_ticket(ticket) }
+            { status: 200, data: api_ticket(ticket) }
+          end
         elsif method == "POST" && path == "/tickets"
           return unless require_permission!(:ticket_write)
 
@@ -1819,9 +1825,13 @@ module Helpdesk
             { status: 404, error: "Ticket not found." }
           end
         elsif method == "GET" && path == "/users"
-          { status: 200, data: @users.all.map { |user| api_user(user) } }
+          cached_api_response([@current_user&.id, method, path, body]) do
+            { status: 200, data: @users.all.map { |user| api_user(user) } }
+          end
         elsif method == "GET" && path == "/webhooks"
-          { status: 200, data: @webhooks.all }
+          cached_api_response([@current_user&.id, method, path, body]) do
+            { status: 200, data: @webhooks.all }
+          end
         elsif method == "POST" && path == "/webhooks"
           return unless require_permission!(:admin)
 
@@ -1918,6 +1928,18 @@ module Helpdesk
         payload[key.to_s] = value
       end
       JSON.pretty_generate(payload)
+    end
+
+    def cached_api_response(key)
+      normalized_key = Array(key).map(&:to_s).join("|")
+      entry = @api_response_cache[normalized_key]
+      if entry && (Time.now.utc - entry[:cached_at]) < API_CACHE_TTL_SECONDS
+        return entry[:value]
+      end
+
+      value = yield
+      @api_response_cache[normalized_key] = { value: value, cached_at: Time.now.utc }
+      value
     end
 
     def parse_api_body(body)
