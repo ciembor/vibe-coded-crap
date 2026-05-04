@@ -68,6 +68,21 @@ module Helpdesk
       ticket
     end
 
+    def import_json(path)
+      rows = JSON.parse(File.read(path))
+      unless rows.is_a?(Array)
+        raise ArgumentError, "import file must contain an array of tickets"
+      end
+
+      tickets = rows.map { |row| Ticket.from_h(row).to_h }
+      save!(tickets)
+      tickets.count
+    rescue Errno::ENOENT
+      raise ArgumentError, "import file not found: #{path}"
+    rescue JSON::ParserError
+      raise ArgumentError, "import file is not valid JSON: #{path}"
+    end
+
     private
 
     def default_path

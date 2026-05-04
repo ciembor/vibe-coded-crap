@@ -39,6 +39,7 @@ module Helpdesk
         when "dashboard" then dashboard
         when "stats" then dashboard
         when "export" then export(args)
+        when "import" then import(args)
         when "exit", "quit" then break
         else
           puts "Unknown command: #{command}. Type 'help'."
@@ -76,6 +77,7 @@ module Helpdesk
           stats
           export csv [PATH]
           export json [PATH]
+          import json [PATH]
           exit
       HELP
     end
@@ -346,6 +348,20 @@ module Helpdesk
       FileUtils.mkdir_p(File.dirname(path))
       File.write(path, JSON.pretty_generate(tickets.map(&:to_h)))
       puts "Exported #{tickets.count} tickets to #{path}."
+    end
+
+    def import(args)
+      format = args[0]
+      case format
+      when "json"
+        path = args[1] || prompt("JSON path", "data/tickets-export.json")
+        count = @store.import_json(path)
+        puts "Imported #{count} tickets from #{path}."
+      else
+        puts "Usage: import json [PATH]"
+      end
+    rescue ArgumentError => e
+      puts e.message
     end
 
     def prompt(label, default = nil)
