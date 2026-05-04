@@ -5,6 +5,7 @@ require "json"
 require "fileutils"
 require "helpdesk/audit_log"
 require "helpdesk/store"
+require "helpdesk/template_store"
 require "helpdesk/user_store"
 
 module Helpdesk
@@ -12,6 +13,7 @@ module Helpdesk
     def initialize(store: Store.new)
       @store = store
       @audit_log = AuditLog.new
+      @templates = TemplateStore.new
       @users = UserStore.new
       seed_default_user
       @current_user = @users.all.first
@@ -32,7 +34,7 @@ module Helpdesk
         when "help" then print_help
         when "list" then list(args)
         when "show" then show(args)
-        when "new" then create_ticket
+        when "new" then create_ticket(args)
         when "edit" then edit_ticket(args)
         when "delete" then delete_ticket(args)
         when "close" then close_tickets(args)
@@ -49,6 +51,7 @@ module Helpdesk
         when "filter" then filter(args)
         when "filters" then list_favorite_filters
         when "field" then manage_custom_fields(args)
+        when "template" then manage_templates(args)
         when "activity" then activity(args)
         when "overdue" then overdue
         when "remind" then remind(args)
@@ -95,6 +98,7 @@ module Helpdesk
           status ID STATUS
           comment ID TEXT
           note ID TEXT
+          new [TEMPLATE]
           watch add ID USER_ID
           watch remove ID USER_ID
           watch list ID
@@ -121,6 +125,11 @@ module Helpdesk
           field set ID KEY VALUE
           field remove ID KEY
           field list ID
+          template list
+          template show NAME
+          template add
+          template edit NAME
+          template delete NAME
           activity [--last N] [--ticket ID]
           dashboard
           stats
@@ -246,19 +255,32 @@ module Helpdesk
       end
     end
 
-    def create_ticket
+    def create_ticket(args = [])
       return unless require_permission!(:ticket_write)
 
-      title = prompt("Title")
-      description = prompt("Description")
-      status = prompt("Status", "open")
-      priority = prompt("Priority", "medium")
-      ticket_type = prompt("Type (general, bug, feature, incident)", "general")
-      custom_fields = prompt_custom_fields_for_type(ticket_type)
+      template = load_template(args[0])
+      if args[0] && template.nil?
+        puts "Template not found."
+        return
+      end
+      title_default = template ? template.title : ""
+      description_default = template ? template.description : ""
+      status_default = template ? template.status : "open"
+      priority_default = template ? template.priority : "medium"
+      ticket_type_default = template ? template.ticket_type : "general"
+      tags_default = template ? template.tags.join(", ") : ""
+      custom_fields_default = template ? template.custom_fields : {}
+
+      title = prompt("Title", title_default)
+      description = prompt("Description", description_default)
+      status = prompt("Status", status_default)
+      priority = prompt("Priority", priority_default)
+      ticket_type = prompt("Type (general, bug, feature, incident)", ticket_type_default)
+      custom_fields = prompt_custom_fields_for_type(ticket_type, custom_fields_default)
       due_at = prompt("Due date (YYYY-MM-DD)", "")
       reminder_at = prompt("Reminder time (YYYY-MM-DD HH:MM, optional)", "")
       reminder_repeat = prompt("Reminder repeat (daily, weekly, monthly, optional)", "")
-      tags = prompt("Tags (comma separated)", "").split(",").map(&:strip).reject(&:empty?)
+      tags = prompt("Tags (comma separated)", tags_default).split(",").map(&:strip).reject(&:empty?)
       ticket = @store.create(
         title: title,
         description: description,
@@ -613,6 +635,145 @@ module Helpdesk
       end
     rescue ArgumentError => e
       puts e.message
+    end
+
+    def manage_templates(args)
+      action = args[0]
+      case action
+      when "list"
+        list_templates
+      when "show"
+        show_template(args.drop(1))
+      when "add"
+        return unless require_permission!(:admin)
+
+        add_template
+      when "edit"
+        return unless require_permission!(:admin)
+
+        edit_template(args.drop(1))
+      when "delete"
+        return unless require_permission!(:admin)
+
+        delete_template(args.drop(1))
+      else
+        puts "Usage: template list | template show NAME | template add | template edit NAME | template delete NAME"
+      end
+    end
+
+    def list_templates
+      templates = @templates.all
+      if templates.empty?
+        puts "No templates found."
+        return
+      end
+
+      templates.each do |template|
+        puts "##{template.name} [#{template.ticket_type}] #{template.title}"
+      end
+    end
+
+    def show_template(args)
+      name = args[0].to_s.strip
+      if name.empty?
+        puts "Usage: template show NAME"
+        return
+      end
+
+      template = @templates.find(name)
+      unless template
+        puts "Template not found."
+        return
+      end
+
+      puts "Name: #{template.name}"
+      puts "Type: #{template.ticket_type}"
+      puts "Title: #{template.title}"
+      puts "Description: #{template.description}"
+      puts "Status: #{template.status}"
+      puts "Priority: #{template.priority}"
+      puts "Tags: #{template.tags.join(", ")}"
+      puts "Custom fields:"
+      if template.custom_fields.empty?
+        puts "  none"
+      else
+        template.custom_fields.each { |key, value| puts "  #{key}: #{value}" }
+      end
+    end
+
+    def add_template
+      name = prompt("Template name")
+      ticket_type = prompt("Ticket type (general, bug, feature, incident)", "general")
+      title = prompt("Title", "")
+      description = prompt("Description", "")
+      status = prompt("Status", "open")
+      priority = prompt("Priority", "medium")
+      tags = prompt("Tags (comma separated)", "").split(",").map(&:strip).reject(&:empty?)
+      custom_fields = prompt_custom_fields_for_type(ticket_type)
+      template = @templates.create(
+        name: name,
+        ticket_type: ticket_type,
+        title: title,
+        description: description,
+        status: status,
+        priority: priority,
+        tags: tags,
+        custom_fields: custom_fields
+      )
+      log_action("template.create", "template #{template.name}", ticket_type: template.ticket_type)
+      puts "Created template #{template.name}."
+    rescue ArgumentError => e
+      puts e.message
+    end
+
+    def edit_template(args)
+      name = args[0].to_s.strip
+      if name.empty?
+        puts "Usage: template edit NAME"
+        return
+      end
+
+      template = @templates.find(name)
+      unless template
+        puts "Template not found."
+        return
+      end
+
+      attrs = {}
+      attrs[:name] = prompt("Template name", template.name)
+      attrs[:ticket_type] = prompt("Ticket type (general, bug, feature, incident)", template.ticket_type)
+      attrs[:title] = prompt("Title", template.title)
+      attrs[:description] = prompt("Description", template.description)
+      attrs[:status] = prompt("Status", template.status)
+      attrs[:priority] = prompt("Priority", template.priority)
+      attrs[:tags] = prompt("Tags (comma separated)", template.tags.join(", ")).split(",").map(&:strip).reject(&:empty?)
+      attrs[:custom_fields] = prompt_custom_fields_for_type(attrs[:ticket_type], template.custom_fields)
+      template = @templates.update(name, attrs)
+      log_action("template.update", "template #{template.name}", ticket_type: template.ticket_type)
+      puts "Updated template #{template.name}."
+    rescue ArgumentError => e
+      puts e.message
+    end
+
+    def delete_template(args)
+      name = args[0].to_s.strip
+      if name.empty?
+        puts "Usage: template delete NAME"
+        return
+      end
+
+      if @templates.delete(name)
+        log_action("template.delete", "template #{name}")
+        puts "Deleted template #{name}."
+      else
+        puts "Template not found."
+      end
+    end
+
+    def load_template(name)
+      return nil if name.to_s.strip.empty?
+
+      @templates.find(name)
     end
 
     def prompt_custom_fields_for_type(ticket_type, existing_fields = {})
