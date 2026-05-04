@@ -159,6 +159,7 @@ module Helpdesk
           escalation rules reset [PRIORITY|all]
           analytics [summary|status|aging|trend]
           report daily [DATE]
+          report weekly [DATE]
           dashboard
           stats
           export csv [PATH]
@@ -1233,8 +1234,10 @@ module Helpdesk
       case action
       when "daily", nil
         report_daily(args[1])
+      when "weekly"
+        report_weekly(args[1])
       else
-        puts "Usage: report daily [DATE]"
+        puts "Usage: report daily [DATE] | report weekly [DATE]"
       end
     end
 
@@ -1873,29 +1876,52 @@ module Helpdesk
     def report_daily(date_string = nil)
       date = parse_report_date(date_string) || Date.today - 1
       tickets = @store.all
-      created = tickets.count { |ticket| parse_date(ticket.created_at) == date }
-      closed = tickets.count { |ticket| parse_date(ticket.closed_at) == date }
-      updated = tickets.count { |ticket| parse_date(ticket.updated_at) == date }
-      due_today = tickets.count { |ticket| parse_date(ticket.due_at) == date }
-      reminders_due = tickets.count { |ticket| parse_time(ticket.reminder_at)&.to_date == date }
-      esc_candidates = tickets.count { |ticket| ticket.escalation_needed? && parse_date(ticket.created_at) <= date }
-      sla_breaches = tickets.count { |ticket| ticket.sla_status == "breached" && parse_date(ticket.created_at) <= date }
+      puts "Daily summary report for #{date}"
+      print_summary_metrics(tickets, date, date)
+      print_priority_breakdown(tickets)
+      print_top_tags(tickets)
+    end
+
+    def report_weekly(date_string = nil)
+      reference_date = parse_report_date(date_string) || Date.today - 7
+      week_start = reference_date - (reference_date.wday - 1) % 7
+      week_end = week_start + 6
+      tickets = @store.all
+
+      puts "Weekly summary report for #{week_start} to #{week_end}"
+      print_summary_metrics(tickets, week_start, week_end)
+      print_priority_breakdown(tickets)
+      print_top_tags(tickets)
+      puts "Daily breakdown:"
+      (week_start..week_end).each do |date|
+        day_stats = summary_metrics_for(tickets, date, date)
+        puts "  #{date}: created #{day_stats[:created]}, closed #{day_stats[:closed]}, updated #{day_stats[:updated]}"
+      end
+    end
+
+    def print_summary_metrics(tickets, start_date, end_date)
+      stats = summary_metrics_for(tickets, start_date, end_date)
       open_tickets = open_ticket_scope(tickets)
 
-      puts "Daily summary report for #{date}"
-      puts "Created: #{created}"
-      puts "Closed: #{closed}"
-      puts "Updated: #{updated}"
+      puts "Created: #{stats[:created]}"
+      puts "Closed: #{stats[:closed]}"
+      puts "Updated: #{stats[:updated]}"
       puts "Open now: #{open_tickets.count}"
       puts "Overdue now: #{tickets.count(&:overdue?)}"
-      puts "Due today: #{due_today}"
-      puts "Reminders due today: #{reminders_due}"
-      puts "Escalation candidates: #{esc_candidates}"
-      puts "SLA breaches: #{sla_breaches}"
+      puts "Due in range: #{stats[:due]}"
+      puts "Reminders due in range: #{stats[:reminders]}"
+      puts "Escalation candidates in range: #{stats[:escalations]}"
+      puts "SLA breaches in range: #{stats[:breaches]}"
+    end
+
+    def print_priority_breakdown(tickets)
       puts "Top priorities:"
       Ticket::PRIORITIES.each do |priority|
         puts "  #{priority}: #{tickets.count { |ticket| ticket.priority == priority }}"
       end
+    end
+
+    def print_top_tags(tickets)
       puts "Top tags:"
       tag_counts = tickets.flat_map(&:tags).tally.sort_by { |tag, count| [-count, tag] }.first(5)
       if tag_counts.empty?
@@ -1905,6 +1931,19 @@ module Helpdesk
           puts "  #{tag}: #{count}"
         end
       end
+    end
+
+    def summary_metrics_for(tickets, start_date, end_date)
+      range = start_date..end_date
+      {
+        created: tickets.count { |ticket| date_in_range?(parse_date(ticket.created_at), range) },
+        closed: tickets.count { |ticket| date_in_range?(parse_date(ticket.closed_at), range) },
+        updated: tickets.count { |ticket| date_in_range?(parse_date(ticket.updated_at), range) },
+        due: tickets.count { |ticket| date_in_range?(parse_date(ticket.due_at), range) },
+        reminders: tickets.count { |ticket| date_in_range?(parse_time(ticket.reminder_at)&.to_date, range) },
+        escalations: tickets.count { |ticket| ticket.escalation_needed? && date_in_range?(parse_date(ticket.created_at), range) },
+        breaches: tickets.count { |ticket| ticket.sla_status == "breached" && date_in_range?(parse_date(ticket.created_at), range) }
+      }
     end
 
     def open_ticket_scope(tickets)
@@ -1948,6 +1987,10 @@ module Helpdesk
       Date.parse(value.to_s)
     rescue ArgumentError
       nil
+    end
+
+    def date_in_range?(date, range)
+      date && range.cover?(date)
     end
 
     def parse_time(value)
