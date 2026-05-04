@@ -88,6 +88,7 @@ module Helpdesk
         when "notify" then manage_notifications(args)
         when "whoami" then whoami
         when "audit" then audit(args)
+        when "api" then api(args)
         when "webhook" then manage_webhooks(args)
         when "webhooks" then list_webhooks
         when "exit", "quit" then break
@@ -201,6 +202,7 @@ module Helpdesk
           notify email ID [BODY]
           whoami
           audit [--last N] [--action ACTION] [--actor NAME] [--subject TEXT]
+          api METHOD PATH [JSON_BODY]
           webhooks
           webhook add NAME URL [EVENT ...]
           webhook remove ID
@@ -1729,6 +1731,80 @@ module Helpdesk
       end
     end
 
+    def api(args)
+      method = args[0].to_s.strip.upcase
+      path = args[1].to_s.strip
+      body = args.drop(2).join(" ")
+      if method.empty? || path.empty?
+        puts "Usage: api METHOD PATH [JSON_BODY]"
+        return
+      end
+
+      payload = parse_api_body(body)
+      response =
+        if method == "GET" && path == "/tickets"
+          { status: 200, data: @store.all.map { |ticket| api_ticket(ticket) } }
+        elsif method == "GET" && path.match?(%r{\A/tickets/\d+\z})
+          ticket = @store.find(path.split("/").last)
+          return puts(api_json_response(404, error: "Ticket not found.")) unless ticket
+
+          { status: 200, data: api_ticket(ticket) }
+        elsif method == "POST" && path == "/tickets"
+          return unless require_permission!(:ticket_write)
+
+          ticket = @store.create(payload.transform_keys(&:to_sym))
+          log_action("ticket.create", "ticket ##{ticket.id}", title: ticket.title, status: ticket.status, priority: ticket.priority)
+          { status: 201, data: api_ticket(ticket) }
+        elsif method == "PATCH" && path.match?(%r{\A/tickets/\d+\z})
+          return unless require_permission!(:ticket_write)
+
+          id = path.split("/").last
+          ticket = @store.update(id, payload.transform_keys(&:to_sym))
+          return puts(api_json_response(404, error: "Ticket not found.")) unless ticket
+
+          log_action("ticket.update", "ticket ##{id}", changes: payload)
+          { status: 200, data: api_ticket(ticket) }
+        elsif method == "DELETE" && path.match?(%r{\A/tickets/\d+\z})
+          return unless require_permission!(:ticket_write)
+
+          id = path.split("/").last
+          if @store.delete(id)
+            log_action("ticket.delete", "ticket ##{id}")
+            { status: 200, data: { deleted: true, id: id.to_i } }
+          else
+            { status: 404, error: "Ticket not found." }
+          end
+        elsif method == "GET" && path == "/users"
+          { status: 200, data: @users.all.map { |user| api_user(user) } }
+        elsif method == "GET" && path == "/webhooks"
+          { status: 200, data: @webhooks.all }
+        elsif method == "POST" && path == "/webhooks"
+          return unless require_permission!(:admin)
+
+          webhook = @webhooks.create(
+            name: payload["name"] || payload[:name],
+            url: payload["url"] || payload[:url],
+            events: payload["events"] || payload[:events] || []
+          )
+          { status: 201, data: webhook }
+        elsif method == "DELETE" && path.match?(%r{\A/webhooks/\d+\z})
+          return unless require_permission!(:admin)
+
+          id = path.split("/").last
+          if @webhooks.delete(id)
+            { status: 200, data: { deleted: true, id: id.to_i } }
+          else
+            { status: 404, error: "Webhook not found." }
+          end
+        else
+                   { status: 404, error: "Unknown API route." }
+        end
+
+      puts api_json_response(response[:status], response[:data] || {}, response[:error])
+    rescue ArgumentError, JSON::ParserError => e
+      puts api_json_response(400, error: e.message)
+    end
+
     def list_webhooks
       webhooks = @webhooks.all
       if webhooks.empty?
@@ -1739,6 +1815,59 @@ module Helpdesk
       webhooks.each do |webhook|
         puts "##{webhook["id"]} #{webhook["name"]} #{webhook["url"]} events=#{Array(webhook["events"]).join(",")}"
       end
+    end
+
+    def api_json_response(status, data = {}, error = nil)
+      payload = { status: status }
+      payload["error"] = error if error
+      payload["data"] = data unless error
+      JSON.pretty_generate(payload)
+    end
+
+    def parse_api_body(body)
+      body = body.to_s.strip
+      return {} if body.empty?
+
+      if body.start_with?("{", "[")
+        parsed = JSON.parse(body)
+        return parsed if parsed.is_a?(Hash)
+
+        raise ArgumentError, "API body must be a JSON object"
+      end
+
+      pairs = Shellwords.split(body)
+      pairs.each_with_object({}) do |pair, hash|
+        key, value = pair.split("=", 2)
+        raise ArgumentError, "invalid body pair: #{pair}" if key.to_s.strip.empty?
+
+        hash[key] = value.nil? ? true : value
+      end
+    end
+
+    def api_ticket(ticket)
+      {
+        id: ticket.id,
+        title: ticket.title,
+        description: ticket.description,
+        status: ticket.status,
+        priority: ticket.priority,
+        tags: ticket.tags,
+        ticket_type: ticket.ticket_type,
+        due_at: ticket.due_at,
+        reminder_at: ticket.reminder_at,
+        reminder_repeat: ticket.reminder_repeat,
+        created_at: ticket.created_at,
+        updated_at: ticket.updated_at
+      }
+    end
+
+    def api_user(user)
+      {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role_label
+      }
     end
 
     def manage_webhooks(args)
