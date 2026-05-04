@@ -29,6 +29,7 @@ module Helpdesk
         when "new" then create_ticket
         when "edit" then edit_ticket(args)
         when "delete" then delete_ticket(args)
+        when "close" then close_tickets(args)
         when "status" then change_status(args)
         when "comment" then add_comment(args)
         when "tag" then manage_tags(args)
@@ -68,6 +69,7 @@ module Helpdesk
           new
           edit ID
           delete ID
+          close ID [ID ...]
           status ID STATUS
           comment ID TEXT
           tag add ID TAG
@@ -176,6 +178,21 @@ module Helpdesk
         puts "Deleted ticket ##{id}."
       else
         puts "Ticket not found."
+      end
+    end
+
+    def close_tickets(args)
+      ids = args.map { |arg| arg.to_i }.reject(&:zero?)
+      if ids.empty?
+        puts "Usage: close ID [ID ...]"
+        return
+      end
+
+      closed_ids = @store.bulk_close(ids)
+      if closed_ids.empty?
+        puts "No matching tickets found."
+      else
+        puts "Closed tickets: #{closed_ids.map { |id| "##{id}" }.join(", ")}"
       end
     end
 

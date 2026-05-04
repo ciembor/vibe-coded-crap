@@ -56,6 +56,26 @@ module Helpdesk
       !removed.nil?
     end
 
+    def bulk_close(ids)
+      id_list = Array(ids).map(&:to_i).uniq
+      return [] if id_list.empty?
+
+      tickets = load_data
+      closed_ids = []
+
+      tickets.each do |row|
+        next unless id_list.include?(row["id"].to_i)
+
+        ticket = Ticket.from_h(row)
+        ticket.update(status: "closed")
+        row.replace(ticket.to_h)
+        closed_ids << ticket.id
+      end
+
+      save!(tickets)
+      closed_ids
+    end
+
     def save_ticket(ticket)
       tickets = load_data
       index = tickets.index { |row| row["id"].to_i == ticket.id.to_i }
