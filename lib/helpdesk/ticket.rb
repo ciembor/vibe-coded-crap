@@ -5,6 +5,12 @@ module Helpdesk
   class Ticket
     STATUSES = %w[open in_progress waiting resolved closed].freeze
     PRIORITIES = %w[low medium high urgent].freeze
+    SLA_RULES = {
+      "low" => { warning_days: 14, breach_days: 21 },
+      "medium" => { warning_days: 7, breach_days: 10 },
+      "high" => { warning_days: 3, breach_days: 5 },
+      "urgent" => { warning_days: 1, breach_days: 2 }
+    }.freeze
 
     attr_accessor :id, :title, :description, :status, :priority, :tags, :comments, :internal_notes, :watchers, :attachments, :custom_fields, :ticket_type, :merged_into_id, :merged_from_ids, :pinned, :pinned_at, :archived, :archived_at, :created_at, :updated_at, :closed_at, :due_at, :reminder_at, :reminder_repeat
 
@@ -319,6 +325,39 @@ module Helpdesk
 
       date = due_date
       date && date < Date.today
+    end
+
+    def sla_status(reference_time = Time.now.utc)
+      return "none" if closed? || status == "resolved" || archived?
+
+      age_days = sla_age_days(reference_time)
+      return "none" unless age_days
+
+      rule = SLA_RULES[priority]
+      return "none" unless rule
+
+      return "breached" if age_days >= rule[:breach_days]
+      return "warning" if age_days >= rule[:warning_days]
+
+      "ok"
+    end
+
+    def sla_warning?
+      %w[warning breached].include?(sla_status)
+    end
+
+    def sla_breached?
+      sla_status == "breached"
+    end
+
+    def sla_age_days(reference_time = Time.now.utc)
+      ((reference_time - Time.parse(created_at)) / 86_400).floor
+    rescue ArgumentError, TypeError
+      nil
+    end
+
+    def sla_rule
+      SLA_RULES[priority]
     end
 
     def reminder_due?

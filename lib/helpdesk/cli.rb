@@ -56,6 +56,7 @@ module Helpdesk
         when "template" then manage_templates(args)
         when "activity" then activity(args)
         when "overdue" then overdue
+        when "sla" then sla
         when "remind" then remind(args)
         when "reminders" then reminders
         when "dashboard" then dashboard
@@ -135,6 +136,7 @@ module Helpdesk
           template edit NAME
           template delete NAME
           activity [--last N] [--ticket ID]
+          sla
           dashboard
           stats
           export csv [PATH]
@@ -192,6 +194,7 @@ module Helpdesk
       puts "Reminder: #{ticket.reminder_at || 'none'}"
       puts "Reminder repeat: #{ticket.reminder_repeat || 'none'}"
       puts "Reminder due: #{ticket.reminder_due? ? 'yes' : 'no'}"
+      puts "SLA: #{format_sla_status(ticket)}"
       puts "Tags: #{ticket.tags.join(", ")}"
       puts "Pinned: #{ticket.pinned? ? 'yes' : 'no'}" if visibility[:pinned]
       puts "Pinned at: #{ticket.pinned_at || 'none'}" if visibility[:pinned]
@@ -1135,6 +1138,8 @@ module Helpdesk
       tickets = @store.all
       counts = tickets.group_by(&:status).transform_values(&:count)
       priority_counts = tickets.group_by(&:priority).transform_values(&:count)
+      sla_warning_count = tickets.count { |ticket| ticket.sla_status == "warning" }
+      sla_breach_count = tickets.count { |ticket| ticket.sla_status == "breached" }
       recent_tickets = tickets.sort_by { |ticket| ticket.updated_at.to_s }.reverse.take(5)
       open_tickets = tickets.select { |ticket| %w[open in_progress waiting].include?(ticket.status) }
       oldest_open_ticket = open_tickets.min_by { |ticket| ticket.created_at.to_s }
@@ -1149,6 +1154,8 @@ module Helpdesk
       puts "Closed: #{counts.fetch("closed", 0)}"
       puts "Overdue: #{tickets.count(&:overdue?)}"
       puts "Due reminders: #{tickets.count(&:reminder_due?)}"
+      puts "SLA warnings: #{sla_warning_count}"
+      puts "SLA breaches: #{sla_breach_count}"
       puts "Total comments: #{tickets.sum { |ticket| ticket.comments.count }}"
       puts "Priority breakdown:"
       Ticket::PRIORITIES.each do |priority|
@@ -1429,11 +1436,35 @@ module Helpdesk
 
     def format_ticket_row(ticket)
       overdue_marker = ticket.overdue? ? " overdue" : ""
+      sla_marker = case ticket.sla_status
+                   when "warning" then " sla_warning"
+                   when "breached" then " sla_breached"
+                   else ""
+                   end
       pinned_marker = ticket.pinned? ? " pinned" : ""
       archived_marker = ticket.archived? ? " archived" : ""
       merged_marker = ticket.merged? ? " merged" : ""
       merged_from_marker = ticket.merged_from_ids.empty? ? "" : " merged_from:#{ticket.merged_from_ids.join(',')}"
-      "##{ticket.id} [#{ticket.ticket_type}/#{ticket.status}/#{ticket.priority}#{overdue_marker}#{pinned_marker}#{archived_marker}#{merged_marker}#{merged_from_marker}] #{ticket.title}#{ticket.tags.empty? ? '' : " ##{ticket.tags.join(' #')}"}"
+      "##{ticket.id} [#{ticket.ticket_type}/#{ticket.status}/#{ticket.priority}#{overdue_marker}#{sla_marker}#{pinned_marker}#{archived_marker}#{merged_marker}#{merged_from_marker}] #{ticket.title}#{ticket.tags.empty? ? '' : " ##{ticket.tags.join(' #')}"}"
+    end
+
+    def format_sla_status(ticket)
+      case ticket.sla_status
+      when "breached"
+        rule = ticket.sla_rule
+        age = ticket.sla_age_days
+        "breached (age #{age} days, threshold #{rule[:breach_days]} days)"
+      when "warning"
+        rule = ticket.sla_rule
+        age = ticket.sla_age_days
+        "warning (age #{age} days, threshold #{rule[:warning_days]} days)"
+      when "ok"
+        rule = ticket.sla_rule
+        age = ticket.sla_age_days
+        "ok (age #{age} days, threshold #{rule[:warning_days]} days)"
+      else
+        "none"
+      end
     end
 
     def format_filter_options(options)
@@ -1494,6 +1525,19 @@ module Helpdesk
       end
 
       tickets.each { |ticket| puts format_ticket_row(ticket) }
+    end
+
+    def sla
+      tickets = @store.all.select { |ticket| %w[warning breached].include?(ticket.sla_status) }
+      if tickets.empty?
+        puts "No SLA warnings."
+        return
+      end
+
+      tickets.each do |ticket|
+        puts format_ticket_row(ticket)
+        puts "  SLA: #{format_sla_status(ticket)}"
+      end
     end
 
     def reminders
