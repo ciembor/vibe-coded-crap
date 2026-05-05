@@ -14,7 +14,7 @@ module Helpdesk
     end
 
     def all
-      load_data.sort_by { |row| row["id"].to_i }
+      (load_data + config_data).uniq { |row| row["name"].to_s }.sort_by { |row| row["id"].to_i }
     end
 
     def find(id)
@@ -31,7 +31,7 @@ module Helpdesk
       command = attrs.fetch(:command).to_s.strip
       raise ArgumentError, "plugin name cannot be empty" if name.empty?
       raise ArgumentError, "plugin command cannot be empty" if command.empty?
-      raise ArgumentError, "plugin name already exists" if plugins.any? { |row| row["name"].to_s == name }
+      raise ArgumentError, "plugin name already exists" if all.any? { |row| row["name"].to_s == name }
 
       plugin = {
         "id" => next_id(plugins),
@@ -71,8 +71,22 @@ module Helpdesk
       File.expand_path("../../data/plugins.json", __dir__)
     end
 
+    def config_path
+      ENV.fetch("HELPDESK_PLUGINS_CONFIG", File.expand_path("../../data/plugins.config.json", __dir__))
+    end
+
     def load_data
       JSON.parse(File.read(path))
+    rescue Errno::ENOENT, JSON::ParserError
+      []
+    end
+
+    def config_data
+      parsed = JSON.parse(File.read(config_path))
+      rows = parsed.is_a?(Array) ? parsed : (parsed["plugins"] || parsed[:plugins] || [])
+      Array(rows).map.with_index(1) do |row, idx|
+        normalize_plugin(row, idx)
+      end.compact
     rescue Errno::ENOENT, JSON::ParserError
       []
     end
@@ -83,6 +97,23 @@ module Helpdesk
 
     def next_id(rows)
       (rows.map { |row| row["id"].to_i }.max || 0) + 1
+    end
+
+    def normalize_plugin(row, fallback_id)
+      row = row.is_a?(Hash) ? row : {}
+      name = row["name"] || row[:name]
+      command = row["command"] || row[:command]
+      enabled = row.key?("enabled") ? row["enabled"] : row[:enabled]
+      return nil if name.to_s.strip.empty? || command.to_s.strip.empty?
+
+      {
+        "id" => (row["id"] || row[:id] || fallback_id).to_i,
+        "name" => name.to_s.strip,
+        "command" => command.to_s.strip,
+        "enabled" => enabled.nil? ? true : enabled,
+        "created_at" => row["created_at"] || row[:created_at] || Time.now.utc.iso8601,
+        "updated_at" => row["updated_at"] || row[:updated_at] || Time.now.utc.iso8601
+      }
     end
 
     def render_command(template, args)
