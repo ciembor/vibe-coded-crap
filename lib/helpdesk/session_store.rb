@@ -1,15 +1,11 @@
-require "json"
-require "fileutils"
 require "time"
+require "helpdesk/json_file_store"
 
 module Helpdesk
-  class SessionStore
-    attr_reader :path
+  class SessionStore < JsonFileStore
 
     def initialize(path: default_path)
-      @path = path
-      FileUtils.mkdir_p(File.dirname(path))
-      save!(default_payload) unless File.exist?(path)
+      super
     end
 
     def current_user_id
@@ -54,17 +50,6 @@ module Helpdesk
         "debug_enabled" => false,
         "updated_at" => Time.now.utc.iso8601
       }
-    end
-
-    def load_data
-      data = JSON.parse(File.read(path))
-      data.is_a?(Hash) ? data : {}
-    rescue Errno::ENOENT, JSON::ParserError
-      default_payload
-    end
-
-    def save!(payload)
-      File.write(path, JSON.pretty_generate(payload))
     end
   end
 end

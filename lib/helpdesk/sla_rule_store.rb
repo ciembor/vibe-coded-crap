@@ -1,13 +1,11 @@
-require "json"
-require "fileutils"
 require "helpdesk/ticket"
+require "helpdesk/json_file_store"
 
 module Helpdesk
-  class SlaRuleStore
-    def initialize(path: default_path)
-      @path = path
-      FileUtils.mkdir_p(File.dirname(path))
-      save!(default_rules) unless File.exist?(path)
+  class SlaRuleStore < JsonFileStore
+
+    def default_payload
+      default_rules
     end
 
     def all
@@ -67,12 +65,6 @@ module Helpdesk
       end
     end
 
-    def load_data
-      JSON.parse(File.read(@path))
-    rescue Errno::ENOENT, JSON::ParserError
-      default_rules
-    end
-
     def normalize_rules(rules)
       source = rules.is_a?(Hash) ? rules : {}
       Ticket::PRIORITIES.each_with_object({}) do |priority, normalized|
@@ -84,8 +76,5 @@ module Helpdesk
       end
     end
 
-    def save!(rules)
-      File.write(@path, JSON.pretty_generate(normalize_rules(rules)))
-    end
   end
 end
