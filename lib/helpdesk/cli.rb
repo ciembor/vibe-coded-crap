@@ -55,6 +55,7 @@ module Helpdesk
         next if line.empty?
 
         command, *args = Shellwords.split(line)
+        command = resolve_alias(command)
         case command
         when "help" then print_help
         when "list" then list(args)
@@ -112,6 +113,7 @@ module Helpdesk
         when "plugins" then list_plugins
         when "webhook" then manage_webhooks(args)
         when "webhooks" then list_webhooks
+        when "aliases" then list_aliases
         when "exit", "quit" then break
         else
           if run_plugin_command(command, args)
@@ -245,6 +247,7 @@ module Helpdesk
           hook add NAME EVENT COMMAND
           hook remove ID
           hook test ID [EVENT]
+          aliases
           plugins
           plugin add NAME COMMAND
           plugin remove ID
@@ -2188,6 +2191,13 @@ module Helpdesk
       end
     end
 
+    def list_aliases
+      aliases = command_aliases
+      aliases.each do |name, target|
+        puts "#{name} -> #{target}"
+      end
+    end
+
     def list_plugins
       plugins = @plugins.all
       if plugins.empty?
@@ -3553,6 +3563,26 @@ module Helpdesk
         action.start_with?("plugin.") ||
         action.start_with?("escalation.") ||
         action == "tickets.import"
+    end
+
+    def resolve_alias(command)
+      command_aliases.fetch(command.to_s, command.to_s)
+    end
+
+    def command_aliases
+      {
+        "ls" => "list",
+        "showt" => "show",
+        "newt" => "new",
+        "create" => "new",
+        "add" => "new",
+        "rm" => "delete",
+        "del" => "delete",
+        "done" => "close",
+        "q" => "quit",
+        "quit" => "quit",
+        "stats" => "dashboard"
+      }
     end
 
     def activity_entries_for_ticket(ticket_id)
