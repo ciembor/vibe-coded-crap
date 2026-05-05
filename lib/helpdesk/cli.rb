@@ -2224,6 +2224,7 @@ module Helpdesk
 
         puts "Profile: #{profile["name"]}"
         puts "Data dir: #{profile["data_dir"]}"
+        puts "Environment profile: #{ENV.fetch("HELPDESK_PROFILE", "none")}"
         puts "Active: #{@active_profile && profile["name"] == @active_profile["name"] ? 'yes' : 'no'}"
       when "use"
         name = args[1].to_s.strip

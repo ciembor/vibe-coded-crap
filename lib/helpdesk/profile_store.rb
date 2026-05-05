@@ -20,6 +20,9 @@ module Helpdesk
     end
 
     def active_profile_name
+      configured = ENV.fetch("HELPDESK_PROFILE", "").to_s.strip
+      return configured unless configured.empty?
+
       load_data["active_profile"].to_s
     end
 
