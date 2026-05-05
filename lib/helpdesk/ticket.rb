@@ -1,5 +1,8 @@
 require "date"
 require "time"
+require "helpdesk/ticket_sla_policy"
+require "helpdesk/ticket_escalation_policy"
+require "helpdesk/ticket_transition_policy"
 
 module Helpdesk
   class Ticket
@@ -642,84 +645,47 @@ module Helpdesk
     end
 
     def sla_status(reference_time = Time.now.utc)
-      return "none" if closed? || status == "resolved" || archived?
-
-      age_days = sla_age_days(reference_time)
-      return "none" unless age_days
-
-      rule = sla_rule
-      return "none" unless rule
-
-      return "breached" if age_days >= rule[:breach_days]
-      return "warning" if age_days >= rule[:warning_days]
-
-      "ok"
+      TicketSlaPolicy.new(self).status(reference_time)
     end
 
     def sla_warning?
-      %w[warning breached].include?(sla_status)
+      TicketSlaPolicy.new(self).warning?
     end
 
     def sla_breached?
-      sla_status == "breached"
+      TicketSlaPolicy.new(self).breached?
     end
 
     def sla_age_days(reference_time = Time.now.utc)
-      ((reference_time - Time.parse(created_at)) / 86_400).floor
-    rescue ArgumentError, TypeError
-      nil
+      TicketSlaPolicy.new(self).age_days(reference_time)
     end
 
     def sla_rule
-      self.class.sla_rule_for(priority)
+      TicketSlaPolicy.new(self).rule
     end
 
     def escalation_rule
-      self.class.escalation_rule_for(priority)
+      TicketEscalationPolicy.new(self).rule
     end
 
     def escalation_status(reference_time = Time.now.utc)
-      return "none" if closed? || status == "resolved" || archived?
-
-      rule = escalation_rule
-      return "none" unless rule && rule[:enabled]
-
-      return "needed" if escalation_triggered?(rule, reference_time)
-
-      "none"
+      TicketEscalationPolicy.new(self).status(reference_time)
     end
 
     def escalation_needed?
-      escalation_status == "needed"
+      TicketEscalationPolicy.new(self).needed?
     end
 
     def escalation_target_role
-      rule = escalation_rule
-      rule ? rule[:target_role] : nil
+      TicketEscalationPolicy.new(self).target_role
     end
 
     def escalation_trigger
-      rule = escalation_rule
-      rule ? rule[:trigger] : nil
+      TicketEscalationPolicy.new(self).trigger
     end
 
     def can_transition_to?(to_status, role: nil)
-      self.class.workflow_transition_allowed?(ticket_type, status, to_status, role)
-    end
-
-    def escalation_triggered?(rule = escalation_rule, _reference_time = Time.now.utc)
-      return false unless rule
-
-      case rule[:trigger]
-      when "sla_warning"
-        sla_warning?
-      when "sla_breached"
-        sla_breached?
-      when "overdue"
-        overdue?
-      else
-        false
-      end
+      TicketTransitionPolicy.new(self).allowed?(to_status, role: role)
     end
 
     def reminder_due?
@@ -795,16 +761,7 @@ module Helpdesk
     private
 
     def normalize_status(value, ticket_type: self.ticket_type)
-      value = value.to_s.strip
-      allowed = self.class.workflow_statuses_for(ticket_type)
-      initial = self.class.initial_status_for(ticket_type)
-      return initial if value.empty? && !initial.empty?
-      return value if allowed.include?(value)
-
-      normalized = value.tr(" ", "_")
-      return normalized if allowed.include?(normalized)
-
-      raise ArgumentError, "invalid status: #{value}"
+      TicketTransitionPolicy.new(self).normalize_status(value, ticket_type: ticket_type)
     end
 
     def normalize_priority(value)
@@ -885,6 +842,8 @@ module Helpdesk
       end
     end
 
+    public
+
     def merge_into!(target_id)
       self.merged_into_id = target_id.to_i
       self.archived = true
@@ -957,6 +916,8 @@ module Helpdesk
       self.dependency_ids = dependency_ids.reject { |existing_id| existing_id.to_i == ticket_id }
       self.updated_at = Time.now.utc.iso8601
     end
+
+    private
 
     def normalize_ticket_type(value)
       value = value.to_s.strip.downcase

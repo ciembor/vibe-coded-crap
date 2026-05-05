@@ -1,6 +1,5 @@
 require "shellwords"
 require "time"
-require "csv"
 require "json"
 require "fileutils"
 require "helpdesk/audit_log"
@@ -17,6 +16,7 @@ require "helpdesk/session_store"
 require "helpdesk/workflow_store"
 require "helpdesk/webhook_store"
 require "helpdesk/cli_command_router"
+require "helpdesk/ticket_exporter"
 
 module Helpdesk
   class CLI
@@ -1770,39 +1770,14 @@ module Helpdesk
 
     def export_csv(path)
       tickets = @store.all
-      FileUtils.mkdir_p(File.dirname(path))
-      CSV.open(path, "w") do |csv|
-        csv << %w[
-          id title description status priority due_at overdue reminder_at reminder_repeat
-          tags comment_count created_at updated_at closed_at
-        ]
-        tickets.each do |ticket|
-          csv << [
-            ticket.id,
-            ticket.title,
-            ticket.description,
-            ticket.status,
-            ticket.priority,
-            ticket.due_at,
-            ticket.overdue?,
-            ticket.reminder_at,
-            ticket.reminder_repeat,
-            ticket.tags.join(";"),
-            ticket.comments.count,
-            ticket.created_at,
-            ticket.updated_at,
-            ticket.closed_at
-          ]
-        end
-      end
-      puts "Exported #{tickets.count} tickets to #{path}."
+      count = TicketExporter.new(tickets).export_csv(path)
+      puts "Exported #{count} tickets to #{path}."
     end
 
     def export_json(path)
       tickets = @store.all
-      FileUtils.mkdir_p(File.dirname(path))
-      File.write(path, JSON.pretty_generate(tickets.map(&:to_h)))
-      puts "Exported #{tickets.count} tickets to #{path}."
+      count = TicketExporter.new(tickets).export_json(path)
+      puts "Exported #{count} tickets to #{path}."
     end
 
     def import(args)

@@ -1,5 +1,9 @@
 require "helpdesk/bulk_action_log"
 require "helpdesk/ticket"
+require "helpdesk/ticket_graph"
+require "helpdesk/ticket_importer"
+require "helpdesk/ticket_merger"
+require "helpdesk/ticket_transition_policy"
 require "helpdesk/json_file_store"
 
 module Helpdesk
@@ -35,170 +39,85 @@ module Helpdesk
     end
 
     def related_tickets(ticket)
-      all.select { |existing| ticket.related_ids.include?(existing.id.to_i) }
+      TicketGraph.related_tickets(ticket, all)
     end
 
     def parent_ticket(ticket)
-      return nil if ticket.parent_id.nil?
-
-      find(ticket.parent_id)
+      TicketGraph.parent_ticket(ticket, all)
     end
 
     def child_tickets(ticket)
-      all.select { |existing| ticket.child_ids.include?(existing.id.to_i) }
+      TicketGraph.child_tickets(ticket, all)
     end
 
     def dependencies_for(ticket)
-      all.select { |existing| ticket.dependency_ids.include?(existing.id.to_i) }
+      TicketGraph.dependencies_for(ticket, all)
     end
 
     def dependent_tickets(ticket)
-      all.select { |existing| existing.dependency_ids.include?(ticket.id.to_i) }
+      TicketGraph.dependent_tickets(ticket, all)
     end
 
     def open_dependencies_for(ticket)
-      dependencies_for(ticket).reject(&:closed?)
+      TicketGraph.open_dependencies_for(ticket, all)
     end
 
     def closeable_ticket?(ticket)
-      open_dependencies_for(ticket).empty?
+      TicketGraph.closeable?(ticket, all)
     end
 
     def relate(source_id, target_id)
-      source_id = source_id.to_i
-      target_id = target_id.to_i
-      raise ArgumentError, "relate requires two ticket IDs" if source_id.zero? || target_id.zero?
-      raise ArgumentError, "cannot relate a ticket to itself" if source_id == target_id
-
       tickets = load_data
-      source_index = tickets.index { |row| row["id"].to_i == source_id }
-      target_index = tickets.index { |row| row["id"].to_i == target_id }
-      return nil unless source_index && target_index
+      result = TicketGraph.new(tickets).relate(source_id, target_id)
+      return nil unless result
 
-      source = Ticket.from_h(tickets[source_index])
-      target = Ticket.from_h(tickets[target_index])
-      source.send(:relate_to, target.id)
-      target.send(:relate_to, source.id)
-
-      tickets[source_index] = source.to_h
-      tickets[target_index] = target.to_h
       save!(tickets)
-      { source: source, target: target }
+      result
     end
 
     def unrelate(source_id, target_id)
-      source_id = source_id.to_i
-      target_id = target_id.to_i
-      raise ArgumentError, "unrelate requires two ticket IDs" if source_id.zero? || target_id.zero?
-      raise ArgumentError, "cannot unrelate a ticket from itself" if source_id == target_id
-
       tickets = load_data
-      source_index = tickets.index { |row| row["id"].to_i == source_id }
-      target_index = tickets.index { |row| row["id"].to_i == target_id }
-      return nil unless source_index && target_index
+      result = TicketGraph.new(tickets).unrelate(source_id, target_id)
+      return nil unless result
 
-      source = Ticket.from_h(tickets[source_index])
-      target = Ticket.from_h(tickets[target_index])
-      source.send(:unrelate, target.id)
-      target.send(:unrelate, source.id)
-
-      tickets[source_index] = source.to_h
-      tickets[target_index] = target.to_h
       save!(tickets)
-      { source: source, target: target }
+      result
     end
 
     def set_parent(child_id, parent_id)
-      child_id = child_id.to_i
-      parent_id = parent_id.to_i
-      raise ArgumentError, "set_parent requires two ticket IDs" if child_id.zero? || parent_id.zero?
-      raise ArgumentError, "cannot set a ticket as its own parent" if child_id == parent_id
-
       tickets = load_data
-      child_index = tickets.index { |row| row["id"].to_i == child_id }
-      parent_index = tickets.index { |row| row["id"].to_i == parent_id }
-      return nil unless child_index && parent_index
+      result = TicketGraph.new(tickets).set_parent(child_id, parent_id)
+      return nil unless result
 
-      child = Ticket.from_h(tickets[child_index])
-      parent = Ticket.from_h(tickets[parent_index])
-      old_parent = child.parent_id ? tickets.find { |row| row["id"].to_i == child.parent_id.to_i } : nil
-      child.send(:set_parent, parent.id)
-      parent.send(:add_child, child.id)
-
-      tickets[child_index] = child.to_h
-      tickets[parent_index] = parent.to_h
-      if old_parent && old_parent["id"].to_i != parent.id.to_i
-        old_parent_ticket = Ticket.from_h(old_parent)
-        old_parent_ticket.send(:remove_child, child.id)
-        old_parent_index = tickets.index { |row| row["id"].to_i == old_parent_ticket.id.to_i }
-        tickets[old_parent_index] = old_parent_ticket.to_h if old_parent_index
-      end
       save!(tickets)
-      { child: child, parent: parent }
+      result
     end
 
     def clear_parent(child_id)
-      child_id = child_id.to_i
-      raise ArgumentError, "clear_parent requires a ticket ID" if child_id.zero?
-
       tickets = load_data
-      child_index = tickets.index { |row| row["id"].to_i == child_id }
-      return nil unless child_index
+      result = TicketGraph.new(tickets).clear_parent(child_id)
+      return nil unless result
 
-      child = Ticket.from_h(tickets[child_index])
-      parent = child.parent_id ? find(child.parent_id) : nil
-      child.send(:clear_parent)
-      tickets[child_index] = child.to_h
-      if parent
-        parent_index = tickets.index { |row| row["id"].to_i == parent.id.to_i }
-        if parent_index
-          parent = Ticket.from_h(tickets[parent_index])
-          parent.send(:remove_child, child.id)
-          tickets[parent_index] = parent.to_h
-        end
-      end
       save!(tickets)
-      { child: child, parent: parent }
+      result
     end
 
     def add_dependency(ticket_id, dependency_id)
-      ticket_id = ticket_id.to_i
-      dependency_id = dependency_id.to_i
-      raise ArgumentError, "add_dependency requires two ticket IDs" if ticket_id.zero? || dependency_id.zero?
-      raise ArgumentError, "cannot add a dependency to itself" if ticket_id == dependency_id
-
       tickets = load_data
-      ticket_index = tickets.index { |row| row["id"].to_i == ticket_id }
-      dependency_index = tickets.index { |row| row["id"].to_i == dependency_id }
-      return nil unless ticket_index && dependency_index
+      result = TicketGraph.new(tickets).add_dependency(ticket_id, dependency_id)
+      return nil unless result
 
-      ticket = Ticket.from_h(tickets[ticket_index])
-      dependency = Ticket.from_h(tickets[dependency_index])
-      ticket.send(:add_dependency, dependency.id)
-
-      tickets[ticket_index] = ticket.to_h
       save!(tickets)
-      { ticket: ticket, dependency: dependency }
+      result
     end
 
     def remove_dependency(ticket_id, dependency_id)
-      ticket_id = ticket_id.to_i
-      dependency_id = dependency_id.to_i
-      raise ArgumentError, "remove_dependency requires two ticket IDs" if ticket_id.zero? || dependency_id.zero?
-      raise ArgumentError, "cannot remove a dependency from itself" if ticket_id == dependency_id
-
       tickets = load_data
-      ticket_index = tickets.index { |row| row["id"].to_i == ticket_id }
-      dependency_index = tickets.index { |row| row["id"].to_i == dependency_id }
-      return nil unless ticket_index && dependency_index
+      result = TicketGraph.new(tickets).remove_dependency(ticket_id, dependency_id)
+      return nil unless result
 
-      ticket = Ticket.from_h(tickets[ticket_index])
-      dependency = Ticket.from_h(tickets[dependency_index])
-      ticket.send(:remove_dependency, dependency.id)
-
-      tickets[ticket_index] = ticket.to_h
       save!(tickets)
-      { ticket: ticket, dependency: dependency }
+      result
     end
 
     def find(id, include_deleted: false)
@@ -238,7 +157,7 @@ module Helpdesk
       return nil if ticket.deleted?
       if attrs.key?(:status)
         target_type = attrs.fetch(:ticket_type, ticket.ticket_type)
-        target_status = ticket.send(:normalize_status, attrs[:status], ticket_type: target_type)
+        target_status = TicketTransitionPolicy.new(ticket).normalize_status(attrs[:status], ticket_type: target_type)
         unless ticket.can_transition_to?(target_status, role: actor_role)
           raise ArgumentError, "transition #{ticket.status} -> #{target_status} is not permitted for #{actor_role || 'system'}"
         end
@@ -359,59 +278,12 @@ module Helpdesk
     end
 
     def merge(source_id, target_id)
-      source_id = source_id.to_i
-      target_id = target_id.to_i
-      raise ArgumentError, "merge requires two ticket IDs" if source_id.zero? || target_id.zero?
-      raise ArgumentError, "cannot merge a ticket into itself" if source_id == target_id
-
       tickets = load_data
-      source_index = tickets.index { |row| row["id"].to_i == source_id }
-      target_index = tickets.index { |row| row["id"].to_i == target_id }
-      return nil unless source_index && target_index
+      result = TicketMerger.new(tickets).merge(source_id, target_id)
+      return nil unless result
 
-      source = Ticket.from_h(tickets[source_index])
-      target = Ticket.from_h(tickets[target_index])
-
-      source.comments.each do |comment|
-        target.add_comment(
-          body: "[Merged from ##{source.id}] #{comment["body"]}",
-          author: comment["author"]
-        )
-      end
-
-      source.internal_notes.each do |note|
-        target.add_internal_note(
-          body: "[Merged from ##{source.id}] #{note["body"]}",
-          author: note["author"]
-        )
-      end
-
-      source.attachments.each do |attachment|
-        target.add_attachment(
-          name: "[Merged from ##{source.id}] #{attachment["name"]}",
-          content_type: attachment["content_type"],
-          size: attachment["size"],
-          description: attachment["description"],
-          uploaded_by: attachment["uploaded_by"]
-        )
-      end
-
-      source.tags.each { |tag| target.add_tag(tag) }
-      source.watchers.each { |watcher_id| target.add_watcher(watcher_id) }
-
-      source.custom_fields.each do |key, value|
-        target.custom_fields[key] = value if target.custom_fields[key].to_s.strip.empty?
-      end
-
-      target.send(:add_merged_from, source.id)
-      source.send(:merge_into!, target.id)
-      source.description = [source.description, "Merged into ticket ##{target.id}."].reject(&:empty?).join("\n\n")
-      source.custom_fields = source.custom_fields.merge("merged_into" => target.id.to_s)
-
-      tickets[target_index] = target.to_h
-      tickets[source_index] = source.to_h
       save!(tickets)
-      { source: source, target: target }
+      result
     end
 
     def undo_last_bulk_action
@@ -435,51 +307,10 @@ module Helpdesk
     end
 
     def import_json(path)
-      rows = JSON.parse(File.read(path))
-      unless rows.is_a?(Array)
-        raise ArgumentError, "import file must contain an array of tickets"
-      end
-
       tickets = load_data
-      imported = 0
-      merged = 0
-      remapped = 0
-
-      rows.each do |row|
-        imported_ticket = Ticket.from_h(row)
-        existing_index = tickets.index { |existing| existing["id"].to_i == imported_ticket.id.to_i }
-        duplicate_index = tickets.index do |existing|
-          existing_ticket = Ticket.from_h(existing)
-          existing_ticket.duplicate_key == imported_ticket.duplicate_key
-        end
-
-        if duplicate_index
-          merged_ticket = merge_imported_ticket(Ticket.from_h(tickets[duplicate_index]), imported_ticket)
-          tickets[duplicate_index] = merged_ticket.to_h
-          merged += 1
-        elsif existing_index
-          remapped_ticket = Ticket.from_h(imported_ticket.to_h)
-          remapped_ticket.id = next_id(tickets)
-          remapped_ticket.normalize!
-          tickets << remapped_ticket.to_h
-          remapped += 1
-        else
-          tickets << imported_ticket.to_h
-        end
-
-        imported += 1
-      end
-
+      result = TicketImporter.new(tickets, next_id: method(:next_id)).import_json(path)
       save!(tickets)
-      {
-        imported: imported,
-        merged: merged,
-        remapped: remapped
-      }
-    rescue Errno::ENOENT
-      raise ArgumentError, "import file not found: #{path}"
-    rescue JSON::ParserError
-      raise ArgumentError, "import file is not valid JSON: #{path}"
+      result
     end
 
     private
@@ -495,105 +326,5 @@ module Helpdesk
       raise ArgumentError, errors.join("; ")
     end
 
-    def merge_imported_ticket(existing_ticket, imported_ticket)
-      existing = Ticket.from_h(existing_ticket.to_h)
-      source = imported_ticket
-
-      existing.title = choose_nonempty(existing.title, source.title)
-      existing.description = choose_nonempty(existing.description, source.description)
-      existing.status = choose_status(existing.status, source.status)
-      existing.priority = choose_priority(existing.priority, source.priority)
-      existing.ticket_type = choose_nonempty(existing.ticket_type, source.ticket_type)
-      existing.due_at = choose_due_at(existing.due_at, source.due_at)
-      existing.reminder_at = choose_reminder_at(existing.reminder_at, source.reminder_at)
-      existing.reminder_repeat = choose_nonempty(existing.reminder_repeat, source.reminder_repeat)
-      existing.tags = (existing.tags + source.tags).uniq.sort
-      existing.watchers = (existing.watchers + source.watchers).uniq.sort
-      existing.pinned = existing.pinned? || source.pinned?
-      existing.archived = existing.archived? || source.archived?
-      existing.custom_fields = existing.custom_fields.merge(source.custom_fields) do |_key, left, right|
-        left.to_s.strip.empty? ? right : left
-      end
-
-      source.comments.each do |comment|
-        existing.add_comment(
-          body: "[Imported from ##{source.id}] #{comment["body"]}",
-          author: comment["author"]
-        )
-      end
-
-      source.internal_notes.each do |note|
-        existing.add_internal_note(
-          body: "[Imported from ##{source.id}] #{note["body"]}",
-          author: note["author"]
-        )
-      end
-
-      source.attachments.each do |attachment|
-        existing.add_attachment(
-          name: "[Imported from ##{source.id}] #{attachment["name"]}",
-          content_type: attachment["content_type"],
-          size: attachment["size"],
-          description: attachment["description"],
-          uploaded_by: attachment["uploaded_by"]
-        )
-      end
-
-      existing.normalize!
-    end
-
-    def choose_nonempty(current, incoming)
-      current.to_s.strip.empty? ? incoming : current
-    end
-
-    def choose_status(current, incoming)
-      order = %w[open in_progress waiting resolved closed]
-      current_index = order.index(current.to_s) || order.length
-      incoming_index = order.index(incoming.to_s) || order.length
-      incoming_index < current_index ? incoming : current
-    end
-
-    def choose_priority(current, incoming)
-      order = %w[urgent high medium low]
-      current_index = order.index(current.to_s) || order.length
-      incoming_index = order.index(incoming.to_s) || order.length
-      incoming_index < current_index ? incoming : current
-    end
-
-    def choose_due_at(current, incoming)
-      current_date = parse_date(current)
-      incoming_date = parse_date(incoming)
-      return incoming if current_date.nil? && incoming_date
-      return current if incoming_date.nil? && current_date
-      return current if current_date.nil? && incoming_date.nil?
-
-      incoming_date < current_date ? incoming : current
-    end
-
-    def choose_reminder_at(current, incoming)
-      current_time = parse_time(current)
-      incoming_time = parse_time(incoming)
-      return incoming if current_time.nil? && incoming_time
-      return current if incoming_time.nil? && current_time
-      return current if current_time.nil? && incoming_time.nil?
-
-      incoming_time < current_time ? incoming : current
-    end
-
-    def parse_date(value)
-      return nil if value.to_s.strip.empty?
-
-      Date.parse(value.to_s)
-    rescue ArgumentError
-      nil
-    end
-
-    def parse_time(value)
-      return nil if value.to_s.strip.empty?
-
-      Time.parse(value.to_s).utc
-    rescue ArgumentError
-      nil
-    end
   end
 end
