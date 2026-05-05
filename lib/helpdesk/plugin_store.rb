@@ -7,8 +7,9 @@ module Helpdesk
   class PluginStore
     attr_reader :path
 
-    def initialize(path: default_path)
+    def initialize(path: default_path, config_path: default_config_path)
       @path = path
+      @config_path = config_path
       FileUtils.mkdir_p(File.dirname(path))
       save!([]) unless File.exist?(path)
     end
@@ -72,7 +73,11 @@ module Helpdesk
     end
 
     def config_path
-      ENV.fetch("HELPDESK_PLUGINS_CONFIG", File.expand_path("../../data/plugins.config.json", __dir__))
+      @config_path || ENV.fetch("HELPDESK_PLUGINS_CONFIG", default_config_path)
+    end
+
+    def default_config_path
+      File.expand_path("../../data/plugins.config.json", __dir__)
     end
 
     def load_data

@@ -10,6 +10,7 @@ require "helpdesk/escalation_rule_store"
 require "helpdesk/store"
 require "helpdesk/sla_rule_store"
 require "helpdesk/sort_rule_store"
+require "helpdesk/profile_store"
 require "helpdesk/template_store"
 require "helpdesk/user_store"
 require "helpdesk/session_store"
@@ -22,28 +23,13 @@ module Helpdesk
     API_RATE_WINDOW_SECONDS = 60
     API_CACHE_TTL_SECONDS = 30
 
-    def initialize(store: Store.new)
+    def initialize(store: nil)
+      @profiles = ProfileStore.new
       @store = store
-      @audit_log = AuditLog.new
-      @escalation_rules = EscalationRuleStore.new
-      @sla_rules = SlaRuleStore.new
-      @sort_rules = SortRuleStore.new
-      @templates = TemplateStore.new
-      @users = UserStore.new
-      @session = SessionStore.new
-      @api_tokens = ApiTokenStore.new
-      @hooks = HookStore.new
-      @plugins = PluginStore.new
-      @workflows = WorkflowStore.new
-      @webhooks = WebhookStore.new
-      reload_ticket_workflows!
+      configure_from_profile!(force_profile_dir: store.nil?)
       @api_rate_limit = API_RATE_LIMIT
       @api_rate_window_seconds = API_RATE_WINDOW_SECONDS
       @api_response_cache = {}
-      @escalation_rules.reload_ticket_rules!
-      @sla_rules.reload_ticket_rules!
-      seed_default_user
-      load_session_user!
     end
 
     def run
@@ -117,6 +103,8 @@ module Helpdesk
         when "webhooks" then list_webhooks
         when "aliases" then list_aliases
         when "menu" then interactive_menu(args)
+        when "profile" then manage_profiles(args)
+        when "profiles" then list_profiles
         when "session" then manage_session(args)
         when "exit", "quit" then break
         else
@@ -133,7 +121,8 @@ module Helpdesk
 
     def banner
       current = @current_user ? " (current user: #{@current_user.name}, role: #{@current_user.role_label})" : ""
-      "Helpdesk CLI#{current} - type 'help' for commands"
+      profile = @active_profile ? " (profile: #{@active_profile["name"]})" : ""
+      "Helpdesk CLI#{current}#{profile} - type 'help' for commands"
     end
 
     def print_help
@@ -253,6 +242,11 @@ module Helpdesk
           hook test ID [EVENT]
           aliases
           menu
+          profiles
+          profile show [NAME]
+          profile use NAME
+          profile set NAME data_dir PATH
+          profile delete NAME
           session show
           session clear
           plugins
@@ -2207,6 +2201,74 @@ module Helpdesk
       end
     end
 
+    def list_profiles
+      profiles = @profiles.all
+      if profiles.empty?
+        puts "No profiles."
+        return
+      end
+
+      profiles.each do |profile|
+        marker = @active_profile && profile["name"].to_s == @active_profile["name"].to_s ? " *" : ""
+        puts "#{profile["name"]} data_dir=#{profile["data_dir"]}#{marker}"
+      end
+    end
+
+    def manage_profiles(args)
+      action = args[0]
+      case action
+      when nil, "show"
+        name = args[1] || @active_profile&.dig("name")
+        profile = @profiles.find(name)
+        return puts("Profile not found.") unless profile
+
+        puts "Profile: #{profile["name"]}"
+        puts "Data dir: #{profile["data_dir"]}"
+        puts "Active: #{@active_profile && profile["name"] == @active_profile["name"] ? 'yes' : 'no'}"
+      when "use"
+        name = args[1].to_s.strip
+        return puts("Usage: profile use NAME") if name.empty?
+        unless @profiles.set_active(name)
+          puts "Profile not found."
+          return
+        end
+
+        configure_from_profile!(force_profile_dir: true)
+        log_action("profile.use", "profile #{name}")
+        puts "Switched to profile #{name}."
+      when "set"
+        name = args[1].to_s.strip
+        key = args[2].to_s.strip
+        value = args.drop(3).join(" ")
+        if name.empty? || key.empty? || value.empty?
+          puts "Usage: profile set NAME data_dir PATH"
+          return
+        end
+
+        unless key == "data_dir"
+          puts "Only data_dir can be configured for profiles."
+          return
+        end
+
+        profile = @profiles.upsert(name, "data_dir" => value)
+        log_action("profile.set", "profile #{name}", data_dir: profile["data_dir"])
+        puts "Updated profile #{name}."
+      when "delete"
+        name = args[1].to_s.strip
+        return puts("Usage: profile delete NAME") if name.empty?
+        unless @profiles.delete(name)
+          puts "Profile not found."
+          return
+        end
+
+        puts "Deleted profile #{name}."
+      else
+        puts "Usage: profile show [NAME] | profile use NAME | profile set NAME data_dir PATH | profile delete NAME"
+      end
+    rescue ArgumentError => e
+      puts e.message
+    end
+
     def manage_session(args)
       action = args[0]
       case action
@@ -2252,6 +2314,37 @@ module Helpdesk
       return if @session.nil?
 
       @session.current_user_id = @current_user&.id
+    end
+
+    def configure_from_profile!(force_profile_dir: false)
+      profile = @profiles.active_profile || @profiles.find("default")
+      @active_profile = profile
+      data_dir = if force_profile_dir || @store.nil?
+                   profile ? profile["data_dir"] : File.expand_path("../../data", __dir__)
+                 else
+                   File.dirname(@store.path)
+                 end
+      data_dir = File.expand_path(data_dir.to_s)
+      FileUtils.mkdir_p(data_dir)
+
+      @store = Store.new(path: File.join(data_dir, "tickets.json")) if force_profile_dir || @store.nil?
+      @audit_log = AuditLog.new(path: File.join(data_dir, "audit_log.json"))
+      @escalation_rules = EscalationRuleStore.new(path: File.join(data_dir, "escalation_rules.json"))
+      @sla_rules = SlaRuleStore.new(path: File.join(data_dir, "sla_rules.json"))
+      @sort_rules = SortRuleStore.new(path: File.join(data_dir, "sort_rules.json"))
+      @templates = TemplateStore.new(path: File.join(data_dir, "ticket_templates.json"))
+      @users = UserStore.new(path: File.join(data_dir, "users.json"))
+      @session = SessionStore.new(path: File.join(data_dir, "session.json"))
+      @api_tokens = ApiTokenStore.new(path: File.join(data_dir, "api_tokens.json"))
+      @hooks = HookStore.new(path: File.join(data_dir, "hooks.json"))
+      @plugins = PluginStore.new(path: File.join(data_dir, "plugins.json"), config_path: File.join(data_dir, "plugins.config.json"))
+      @workflows = WorkflowStore.new(path: File.join(data_dir, "workflows.json"))
+      @webhooks = WebhookStore.new(path: File.join(data_dir, "webhooks.json"))
+      reload_ticket_workflows!
+      @escalation_rules.reload_ticket_rules!
+      @sla_rules.reload_ticket_rules!
+      seed_default_user
+      load_session_user!
     end
 
     def api_json_response(status, data = {}, error = nil, meta = {})
