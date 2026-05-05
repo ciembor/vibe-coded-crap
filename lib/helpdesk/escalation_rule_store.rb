@@ -1,5 +1,6 @@
 require "helpdesk/ticket"
 require "helpdesk/json_file_store"
+require "helpdesk/domain_normalization"
 
 module Helpdesk
   class EscalationRuleStore < JsonFileStore
@@ -9,8 +10,7 @@ module Helpdesk
     end
 
     def set(priority, enabled:, trigger:, target_role:)
-      priority = priority.to_s.strip.downcase
-      raise ArgumentError, "invalid priority: #{priority}" unless Ticket::PRIORITIES.include?(priority)
+      priority = normalize_priority(priority)
 
       enabled = normalize_boolean(enabled)
       trigger = normalize_trigger(trigger)
@@ -28,11 +28,11 @@ module Helpdesk
 
     def reset(priority = nil)
       rules = all
-      normalized_priority = priority.to_s.strip.downcase
+      normalized_priority = DomainNormalization.present_string(priority, downcase: true)
       if normalized_priority.empty? || normalized_priority == "all"
         rules = default_rules
       else
-        raise ArgumentError, "invalid priority: #{normalized_priority}" unless Ticket::PRIORITIES.include?(normalized_priority)
+        normalize_priority(normalized_priority)
 
         rules[normalized_priority] = default_rules.fetch(normalized_priority)
       end
@@ -82,28 +82,34 @@ module Helpdesk
     end
 
     def normalize_boolean(value)
-      case value
-      when true, false
-        value
-      else
-        %w[true yes on 1].include?(value.to_s.strip.downcase)
-      end
+      DomainNormalization.boolean(value)
     end
 
     def normalize_trigger(value)
-      value = value.to_s.strip.downcase
-      value = "sla_breached" if value.empty?
-      return value if %w[sla_warning sla_breached overdue].include?(value)
-
-      raise ArgumentError, "invalid escalation trigger: #{value}"
+      DomainNormalization.enum(
+        value,
+        allowed: %w[sla_warning sla_breached overdue],
+        default: "sla_breached",
+        label: "escalation trigger",
+        downcase: true
+      )
     end
 
     def normalize_target_role(value)
-      value = value.to_s.strip.downcase
-      value = "admin" if value.empty?
-      return value if %w[admin agent viewer].include?(value)
+      DomainNormalization.enum(
+        value,
+        allowed: %w[admin agent viewer],
+        default: "admin",
+        label: "escalation target role",
+        downcase: true
+      )
+    end
 
-      raise ArgumentError, "invalid escalation target role: #{value}"
+    def normalize_priority(value)
+      priority = DomainNormalization.present_string(value, downcase: true)
+      return priority if Ticket::PRIORITIES.include?(priority)
+
+      raise ArgumentError, "invalid priority: #{priority}"
     end
   end
 end

@@ -1,5 +1,6 @@
 require "helpdesk/ticket"
 require "helpdesk/json_file_store"
+require "helpdesk/domain_normalization"
 
 module Helpdesk
   class WorkflowStore < JsonFileStore
@@ -179,18 +180,18 @@ module Helpdesk
     end
 
     def normalize_workflow(ticket_type, attrs)
-      ticket_type = ticket_type.to_s.strip
+      ticket_type = DomainNormalization.present_string(ticket_type)
       raise ArgumentError, "ticket type cannot be empty" if ticket_type.empty?
 
-      statuses = Array(attrs["statuses"] || attrs[:statuses]).map { |status| status.to_s.strip }.reject(&:empty?).uniq
+      statuses = DomainNormalization.normalized_strings(DomainNormalization.hash_value(attrs, "statuses"))
       statuses = Ticket::STATUSES if statuses.empty?
-      initial_status = (attrs["initial_status"] || attrs[:initial_status] || statuses.first || "open").to_s.strip
+      initial_status = DomainNormalization.present_string(DomainNormalization.hash_value(attrs, "initial_status", statuses.first || "open"))
       initial_status = statuses.first if initial_status.empty?
       raise ArgumentError, "workflow #{ticket_type} must include closed" unless statuses.include?("closed")
       raise ArgumentError, "workflow #{ticket_type} initial status must be in statuses" unless statuses.include?(initial_status)
-      transitions = normalize_transitions(attrs["transitions"] || attrs[:transitions] || default_transitions(statuses), statuses, ticket_type)
+      transitions = normalize_transitions(DomainNormalization.hash_value(attrs, "transitions", default_transitions(statuses)), statuses, ticket_type)
       permissions = normalize_permissions(
-        attrs["permissions"] || attrs[:permissions] || default_permissions(transitions),
+        DomainNormalization.hash_value(attrs, "permissions", default_permissions(transitions)),
         transitions,
         statuses,
         ticket_type
@@ -198,7 +199,7 @@ module Helpdesk
 
       {
         "ticket_type" => ticket_type,
-        "name" => (attrs["name"] || attrs[:name] || ticket_type.tr("_", " ").capitalize).to_s.strip,
+        "name" => DomainNormalization.present_string(DomainNormalization.hash_value(attrs, "name", ticket_type.tr("_", " ").capitalize)),
         "statuses" => statuses,
         "initial_status" => initial_status,
         "transitions" => transitions,
@@ -216,11 +217,11 @@ module Helpdesk
     def normalize_transitions(transitions, statuses, ticket_type)
       source = transitions.is_a?(Hash) ? transitions : {}
       source.each_with_object({}) do |(from_status, next_statuses), normalized|
-        from_status = from_status.to_s.strip
+        from_status = DomainNormalization.present_string(from_status)
         next if from_status.empty?
         raise ArgumentError, "workflow #{ticket_type} has invalid transition source: #{from_status}" unless statuses.include?(from_status)
 
-        normalized[from_status] = Array(next_statuses).map { |status| status.to_s.strip }.reject(&:empty?).uniq
+        normalized[from_status] = DomainNormalization.normalized_strings(next_statuses)
         invalid = normalized[from_status] - statuses
         raise ArgumentError, "workflow #{ticket_type} has invalid transition targets: #{invalid.join(', ')}" if invalid.any?
       end
@@ -230,19 +231,19 @@ module Helpdesk
       source = permissions.is_a?(Hash) ? permissions : {}
       normalized = default_permissions(transitions)
       source.each_with_object(normalized) do |(from_status, transition_roles), acc|
-        from_status = from_status.to_s.strip
+        from_status = DomainNormalization.present_string(from_status)
         next if from_status.empty?
         raise ArgumentError, "workflow #{ticket_type} has invalid permission source: #{from_status}" unless statuses.include?(from_status)
         valid_targets = Array(transitions[from_status]).map(&:to_s)
 
         acc[from_status] ||= {}
         Hash(transition_roles).each do |to_status, roles|
-          to_status = to_status.to_s.strip
+          to_status = DomainNormalization.present_string(to_status)
           next if to_status.empty?
           raise ArgumentError, "workflow #{ticket_type} has invalid permission target: #{to_status}" unless statuses.include?(to_status)
           raise ArgumentError, "workflow #{ticket_type} has no transition #{from_status} -> #{to_status}" unless valid_targets.include?(to_status)
 
-          normalized_roles = Array(roles).map { |role| role.to_s.strip.downcase }.reject(&:empty?).uniq
+          normalized_roles = DomainNormalization.normalized_strings(roles, downcase: true)
           normalized_roles = Ticket::DEFAULT_TRANSITION_ROLES.dup if normalized_roles.empty?
           invalid_roles = normalized_roles - %w[admin agent viewer]
           raise ArgumentError, "workflow #{ticket_type} has invalid permission roles: #{invalid_roles.join(', ')}" if invalid_roles.any?

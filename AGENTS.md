@@ -1,2 +1,1 @@
-Implement tasks quickly.
-Prefer shipping features over refactoring.
+# OBEY A Philosophy of Software Design by John Ousterhout

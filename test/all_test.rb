@@ -1,0 +1,5 @@
+require_relative "cli_command_router_test"
+require_relative "domain_rules_test"
+require_relative "import_export_test"
+require_relative "persistence_test"
+require_relative "workflow_validation_test"

@@ -12,6 +12,7 @@ module Helpdesk
         @passes_args ? cli.send(@method_name, args) : cli.send(@method_name)
       end
     end
+    private_constant :MethodCommandHandler
 
     ROUTES = {
       "help" => MethodCommandHandler.new(:print_help, passes_args: false),

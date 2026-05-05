@@ -1,5 +1,6 @@
 require "helpdesk/ticket"
 require "helpdesk/json_file_store"
+require "helpdesk/domain_normalization"
 
 module Helpdesk
   class SlaRuleStore < JsonFileStore
@@ -9,8 +10,7 @@ module Helpdesk
     end
 
     def set(priority, warning_days:, breach_days:)
-      priority = priority.to_s.strip.downcase
-      raise ArgumentError, "invalid priority: #{priority}" unless Ticket::PRIORITIES.include?(priority)
+      priority = normalize_priority(priority)
 
       warning_days = warning_days.to_i
       breach_days = breach_days.to_i
@@ -28,12 +28,11 @@ module Helpdesk
 
     def reset(priority = nil)
       rules = all
-      normalized_priority = priority.to_s.strip.downcase
+      normalized_priority = DomainNormalization.present_string(priority, downcase: true)
       if normalized_priority.empty? || normalized_priority == "all"
         rules = default_rules
       else
-        priority = normalized_priority
-        raise ArgumentError, "invalid priority: #{priority}" unless Ticket::PRIORITIES.include?(priority)
+        priority = normalize_priority(normalized_priority)
 
         rules[priority] = default_rules.fetch(priority)
       end
@@ -78,6 +77,13 @@ module Helpdesk
 
     def save!(rules)
       super(normalize_rules(rules))
+    end
+
+    def normalize_priority(value)
+      priority = DomainNormalization.present_string(value, downcase: true)
+      return priority if Ticket::PRIORITIES.include?(priority)
+
+      raise ArgumentError, "invalid priority: #{priority}"
     end
   end
 end

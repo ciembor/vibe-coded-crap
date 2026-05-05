@@ -1,4 +1,5 @@
 require "time"
+require "helpdesk/domain_normalization"
 
 module Helpdesk
   class Template
@@ -33,16 +34,15 @@ module Helpdesk
     end
 
     def normalize!
-      self.name = name.to_s.strip
+      self.name = DomainNormalization.present_string(name)
       raise ArgumentError, "template name cannot be empty" if name.empty?
 
-      self.ticket_type = ticket_type.to_s.strip.downcase
-      self.ticket_type = "general" if ticket_type.empty?
+      self.ticket_type = normalize_ticket_type(ticket_type)
       self.title = title.to_s
       self.description = description.to_s
       self.status = normalize_status(status)
       self.priority = normalize_priority(priority)
-      self.tags = Array(tags).map { |tag| tag.to_s.strip }.reject(&:empty?).uniq.sort
+      self.tags = DomainNormalization.tags(tags)
       self.custom_fields = normalize_custom_fields(custom_fields)
       self.created_at ||= Time.now.utc.iso8601
       self.updated_at ||= created_at
@@ -50,15 +50,15 @@ module Helpdesk
     end
 
     def update(attrs = {})
-      self.name = attrs.fetch(:name, name).to_s.strip
+      self.name = DomainNormalization.present_string(attrs.fetch(:name, name))
       raise ArgumentError, "template name cannot be empty" if name.empty?
 
-      self.ticket_type = attrs.fetch(:ticket_type, ticket_type)
+      self.ticket_type = normalize_ticket_type(attrs.fetch(:ticket_type, ticket_type))
       self.title = attrs.fetch(:title, title).to_s
       self.description = attrs.fetch(:description, description).to_s
       self.status = normalize_status(attrs.fetch(:status, status))
       self.priority = normalize_priority(attrs.fetch(:priority, priority))
-      self.tags = Array(attrs.fetch(:tags, tags)).map { |tag| tag.to_s.strip }.reject(&:empty?).uniq.sort
+      self.tags = DomainNormalization.tags(attrs.fetch(:tags, tags))
       self.custom_fields = normalize_custom_fields(attrs.fetch(:custom_fields, custom_fields))
       self.updated_at = Time.now.utc.iso8601
       self
@@ -81,28 +81,33 @@ module Helpdesk
 
     private
 
-    def normalize_status(value)
-      value = value.to_s.strip
-      return "open" if value.empty?
+    def normalize_ticket_type(value)
+      normalized = DomainNormalization.present_string(value, downcase: true)
+      normalized.empty? ? "general" : normalized
+    end
 
-      %w[open in_progress waiting resolved closed].include?(value) ? value : "open"
+    def normalize_status(value)
+      DomainNormalization.enum(
+        value,
+        allowed: %w[open in_progress waiting resolved closed],
+        default: "open",
+        label: "status",
+        strict: false
+      )
     end
 
     def normalize_priority(value)
-      value = value.to_s.strip
-      return "medium" if value.empty?
-
-      %w[low medium high urgent].include?(value) ? value : "medium"
+      DomainNormalization.enum(
+        value,
+        allowed: %w[low medium high urgent],
+        default: "medium",
+        label: "priority",
+        strict: false
+      )
     end
 
     def normalize_custom_fields(value)
-      hash = value.is_a?(Hash) ? value : {}
-      hash.each_with_object({}) do |(key, val), normalized|
-        key = key.to_s.strip
-        next if key.empty?
-
-        normalized[key] = val.to_s
-      end
+      DomainNormalization.custom_fields(value)
     end
   end
 end

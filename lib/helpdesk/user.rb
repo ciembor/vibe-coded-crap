@@ -1,4 +1,5 @@
 require "time"
+require "helpdesk/domain_normalization"
 
 module Helpdesk
   class User
@@ -35,10 +36,10 @@ module Helpdesk
     end
 
     def normalize!
-      self.name = name.to_s.strip
+      self.name = DomainNormalization.present_string(name)
       raise ArgumentError, "user name cannot be empty" if name.empty?
 
-      self.email = email.to_s.strip
+      self.email = DomainNormalization.present_string(email)
       self.role = normalize_role(role)
       self.notification_preferences = normalize_notification_preferences(notification_preferences)
       self.notification_suppression_rules = normalize_suppression_rules(notification_suppression_rules)
@@ -50,10 +51,10 @@ module Helpdesk
     end
 
     def update(attrs = {})
-      self.name = attrs.fetch(:name, name).to_s.strip
+      self.name = DomainNormalization.present_string(attrs.fetch(:name, name))
       raise ArgumentError, "user name cannot be empty" if name.empty?
 
-      self.email = attrs.fetch(:email, email).to_s.strip
+      self.email = DomainNormalization.present_string(attrs.fetch(:email, email))
       self.role = normalize_role(attrs.fetch(:role, role))
       self.notification_preferences = normalize_notification_preferences(
         attrs.fetch(:notification_preferences, notification_preferences)
@@ -129,11 +130,7 @@ module Helpdesk
     private
 
     def normalize_role(value)
-      value = value.to_s.strip
-      return "agent" if value.empty?
-      return value if ROLES.include?(value)
-
-      raise ArgumentError, "invalid role: #{value}"
+      DomainNormalization.enum(value, allowed: ROLES, default: "agent", label: "role")
     end
 
     def normalize_notification_preferences(value)
@@ -156,14 +153,14 @@ module Helpdesk
         when nil
           normalized[key]
         else
-          %w[true yes on 1].include?(val.to_s.strip.downcase)
+          DomainNormalization.boolean(val)
         end
       end
       normalized
     end
 
     def normalize_suppression_rules(value)
-      rules = Array(value).map { |rule| rule.to_s.strip.downcase }.reject(&:empty?).uniq.sort
+      rules = DomainNormalization.normalized_strings(value, downcase: true, sort: true)
       allowed = %w[all comments reminders manual watchers closed_tickets]
       rules.select { |rule| allowed.include?(rule) }
     end
@@ -171,10 +168,10 @@ module Helpdesk
     def normalize_saved_searches(value)
       Array(value).map do |search|
         {
-          "name" => search["name"] || search[:name] || "",
-          "query" => search["query"] || search[:query] || "",
-          "created_at" => search["created_at"] || search[:created_at] || Time.now.utc.iso8601,
-          "updated_at" => search["updated_at"] || search[:updated_at] || Time.now.utc.iso8601
+          "name" => DomainNormalization.hash_value(search, "name", ""),
+          "query" => DomainNormalization.hash_value(search, "query", ""),
+          "created_at" => DomainNormalization.hash_value(search, "created_at", Time.now.utc.iso8601),
+          "updated_at" => DomainNormalization.hash_value(search, "updated_at", Time.now.utc.iso8601)
         }
       end.reject { |search| search["name"].to_s.strip.empty? || search["query"].to_s.strip.empty? }.uniq { |search| search["name"].to_s.downcase }.sort_by { |search| search["name"].to_s.downcase }
     end
@@ -182,10 +179,10 @@ module Helpdesk
     def normalize_favorite_filters(value)
       Array(value).map do |filter|
         {
-          "name" => filter["name"] || filter[:name] || "",
-          "options" => normalize_filter_options(filter["options"] || filter[:options] || {}),
-          "created_at" => filter["created_at"] || filter[:created_at] || Time.now.utc.iso8601,
-          "updated_at" => filter["updated_at"] || filter[:updated_at] || Time.now.utc.iso8601
+          "name" => DomainNormalization.hash_value(filter, "name", ""),
+          "options" => normalize_filter_options(DomainNormalization.hash_value(filter, "options", {})),
+          "created_at" => DomainNormalization.hash_value(filter, "created_at", Time.now.utc.iso8601),
+          "updated_at" => DomainNormalization.hash_value(filter, "updated_at", Time.now.utc.iso8601)
         }
       end.reject { |filter| filter["name"].to_s.strip.empty? }.uniq { |filter| filter["name"].to_s.downcase }.sort_by { |filter| filter["name"].to_s.downcase }
     end
@@ -204,16 +201,11 @@ module Helpdesk
     end
 
     def fetch_option(hash, key)
-      hash[key] || hash[key.to_sym] || hash[key.to_s]
+      DomainNormalization.hash_value(hash, key)
     end
 
     def truthy?(value)
-      case value
-      when true then true
-      when false, nil then false
-      else
-        %w[true yes on 1].include?(value.to_s.strip.downcase)
-      end
+      DomainNormalization.boolean(value)
     end
   end
 end

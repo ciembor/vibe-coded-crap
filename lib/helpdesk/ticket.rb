@@ -1,5 +1,6 @@
 require "date"
 require "time"
+require "helpdesk/domain_normalization"
 require "helpdesk/ticket_sla_policy"
 require "helpdesk/ticket_escalation_policy"
 require "helpdesk/ticket_transition_policy"
@@ -92,7 +93,7 @@ module Helpdesk
       end
 
       def workflow_transition_allowed?(ticket_type, from_status, to_status, role)
-        role = role.to_s.strip
+        role = DomainNormalization.present_string(role)
         return true if role.empty?
 
         workflow_transition_roles_for(ticket_type, from_status, to_status).include?(role)
@@ -124,40 +125,39 @@ module Helpdesk
       end
 
       def normalize_boolean(value)
-        case value
-        when true, false
-          value
-        else
-          %w[true yes on 1].include?(value.to_s.strip.downcase)
-        end
+        DomainNormalization.boolean(value)
       end
 
       def normalize_escalation_trigger(value)
-        value = value.to_s.strip.downcase
-        value = "sla_breached" if value.empty?
-        return value if %w[sla_warning sla_breached overdue].include?(value)
-
-        raise ArgumentError, "invalid escalation trigger: #{value}"
+        DomainNormalization.enum(
+          value,
+          allowed: %w[sla_warning sla_breached overdue],
+          default: "sla_breached",
+          label: "escalation trigger",
+          downcase: true
+        )
       end
 
       def normalize_escalation_target_role(value)
-        value = value.to_s.strip.downcase
-        value = "admin" if value.empty?
-        return value if %w[admin agent viewer].include?(value)
-
-        raise ArgumentError, "invalid escalation target role: #{value}"
+        DomainNormalization.enum(
+          value,
+          allowed: %w[admin agent viewer],
+          default: "admin",
+          label: "escalation target role",
+          downcase: true
+        )
       end
 
       def normalize_workflows(workflows)
         source = workflows.is_a?(Hash) ? workflows : {}
         source.each_with_object({}) do |(ticket_type, workflow), normalized|
-          ticket_type = ticket_type.to_s.strip
+          ticket_type = DomainNormalization.present_string(ticket_type)
           next if ticket_type.empty?
 
           workflow = workflow.is_a?(Hash) ? workflow : {}
-          statuses = normalize_workflow_statuses(workflow["statuses"] || workflow[:statuses] || STATUSES)
+          statuses = normalize_workflow_statuses(DomainNormalization.hash_value(workflow, "statuses", STATUSES))
           initial_status = normalize_workflow_status(
-            workflow["initial_status"] || workflow[:initial_status] || statuses.first || "open"
+            DomainNormalization.hash_value(workflow, "initial_status", statuses.first || "open")
           )
           if statuses.empty?
             raise ArgumentError, "workflow #{ticket_type} must define at least one status"
@@ -169,18 +169,18 @@ module Helpdesk
             raise ArgumentError, "workflow #{ticket_type} initial status must be in statuses"
           end
           transitions = normalize_workflow_transitions(
-            workflow["transitions"] || workflow[:transitions] || default_workflow_transitions(statuses),
+            DomainNormalization.hash_value(workflow, "transitions", default_workflow_transitions(statuses)),
             statuses: statuses,
             ticket_type: ticket_type
           )
           permissions = normalize_workflow_permissions(
-            workflow["permissions"] || workflow[:permissions] || default_workflow_permissions(transitions),
+            DomainNormalization.hash_value(workflow, "permissions", default_workflow_permissions(transitions)),
             statuses: statuses,
             ticket_type: ticket_type
           )
 
           normalized[ticket_type] = {
-            "name" => (workflow["name"] || workflow[:name] || ticket_type.tr("_", " ").capitalize).to_s,
+            "name" => DomainNormalization.hash_value(workflow, "name", ticket_type.tr("_", " ").capitalize).to_s,
             "statuses" => statuses,
             "initial_status" => initial_status,
             "transitions" => transitions,
@@ -190,7 +190,7 @@ module Helpdesk
       end
 
       def normalize_workflow_statuses(statuses)
-        Array(statuses).map { |status| normalize_workflow_status(status) }.reject(&:empty?).uniq
+        DomainNormalization.normalized_strings(statuses).map { |status| normalize_workflow_status(status) }.uniq
       end
 
       def normalize_workflow_transitions(transitions, statuses:, ticket_type:)
@@ -239,7 +239,7 @@ module Helpdesk
             next if to_status.empty?
             raise ArgumentError, "workflow #{ticket_type} has invalid permission target: #{to_status}" unless statuses.include?(to_status)
 
-            normalized_roles = Array(roles).map { |role| role.to_s.strip.downcase }.reject(&:empty?).uniq
+            normalized_roles = DomainNormalization.normalized_strings(roles, downcase: true)
             normalized_roles = DEFAULT_TRANSITION_ROLES.dup if normalized_roles.empty?
             invalid_roles = normalized_roles - %w[admin agent viewer]
             raise ArgumentError, "workflow #{ticket_type} has invalid permission roles: #{invalid_roles.join(', ')}" if invalid_roles.any?
@@ -337,39 +337,39 @@ module Helpdesk
       self.due_at = normalize_due_at(due_at)
       self.reminder_at = normalize_reminder_at(reminder_at)
       self.reminder_repeat = normalize_reminder_repeat(reminder_repeat)
-      self.tags = Array(tags).map { |tag| tag.to_s.strip }.reject(&:empty?).uniq.sort
-      self.merged_into_id = merged_into_id.to_i.zero? ? nil : merged_into_id.to_i
-      self.merged_from_ids = Array(merged_from_ids).map(&:to_i).reject(&:zero?).uniq.sort
-      self.related_ids = Array(related_ids).map(&:to_i).reject(&:zero?).uniq.sort
-      self.parent_id = parent_id.to_i.zero? ? nil : parent_id.to_i
-      self.child_ids = Array(child_ids).map(&:to_i).reject(&:zero?).uniq.sort
-      self.dependency_ids = Array(dependency_ids).map(&:to_i).reject(&:zero?).uniq.sort
+      self.tags = DomainNormalization.tags(tags)
+      self.merged_into_id = DomainNormalization.optional_id(merged_into_id)
+      self.merged_from_ids = DomainNormalization.ids(merged_from_ids)
+      self.related_ids = DomainNormalization.ids(related_ids)
+      self.parent_id = DomainNormalization.optional_id(parent_id)
+      self.child_ids = DomainNormalization.ids(child_ids)
+      self.dependency_ids = DomainNormalization.ids(dependency_ids)
       self.comments = Array(comments).map do |comment|
         {
-          "id" => comment["id"] || comment[:id],
-          "body" => comment["body"] || comment[:body],
-          "author" => comment["author"] || comment[:author] || "agent",
-          "created_at" => comment["created_at"] || comment[:created_at] || Time.now.utc.iso8601
+          "id" => DomainNormalization.hash_value(comment, "id"),
+          "body" => DomainNormalization.hash_value(comment, "body"),
+          "author" => DomainNormalization.hash_value(comment, "author", "agent"),
+          "created_at" => DomainNormalization.hash_value(comment, "created_at", Time.now.utc.iso8601)
         }
       end
       self.internal_notes = Array(internal_notes).map do |note|
         {
-          "id" => note["id"] || note[:id],
-          "body" => note["body"] || note[:body],
-          "author" => note["author"] || note[:author] || "agent",
-          "created_at" => note["created_at"] || note[:created_at] || Time.now.utc.iso8601
+          "id" => DomainNormalization.hash_value(note, "id"),
+          "body" => DomainNormalization.hash_value(note, "body"),
+          "author" => DomainNormalization.hash_value(note, "author", "agent"),
+          "created_at" => DomainNormalization.hash_value(note, "created_at", Time.now.utc.iso8601)
         }
       end
-      self.watchers = Array(watchers).map { |watcher| watcher.to_i }.reject(&:zero?).uniq.sort
+      self.watchers = DomainNormalization.ids(watchers)
       self.attachments = Array(attachments).each_with_index.map do |attachment, index|
         {
-          "id" => attachment["id"] || attachment[:id] || (index + 1),
-          "name" => attachment["name"] || attachment[:name],
-          "content_type" => attachment["content_type"] || attachment[:content_type] || "",
-          "size" => (attachment["size"] || attachment[:size] || 0).to_i,
-          "description" => attachment["description"] || attachment[:description] || "",
-          "uploaded_by" => attachment["uploaded_by"] || attachment[:uploaded_by] || "agent",
-          "created_at" => attachment["created_at"] || attachment[:created_at] || Time.now.utc.iso8601
+          "id" => DomainNormalization.hash_value(attachment, "id", index + 1),
+          "name" => DomainNormalization.hash_value(attachment, "name"),
+          "content_type" => DomainNormalization.hash_value(attachment, "content_type", ""),
+          "size" => DomainNormalization.hash_value(attachment, "size", 0).to_i,
+          "description" => DomainNormalization.hash_value(attachment, "description", ""),
+          "uploaded_by" => DomainNormalization.hash_value(attachment, "uploaded_by", "agent"),
+          "created_at" => DomainNormalization.hash_value(attachment, "created_at", Time.now.utc.iso8601)
         }
       end
       self.custom_fields = normalize_custom_fields(custom_fields)
@@ -395,28 +395,26 @@ module Helpdesk
       self.due_at = normalize_due_at(attrs.fetch(:due_at, due_at))
       self.reminder_at = normalize_reminder_at(attrs.fetch(:reminder_at, reminder_at))
       self.reminder_repeat = normalize_reminder_repeat(attrs.fetch(:reminder_repeat, reminder_repeat))
-      self.tags = Array(attrs.fetch(:tags, tags)).map { |tag| tag.to_s.strip }.reject(&:empty?).uniq.sort
+      self.tags = DomainNormalization.tags(attrs.fetch(:tags, tags))
       self.attachments = Array(attrs.fetch(:attachments, attachments)).each_with_index.map do |attachment, index|
         {
-          "id" => attachment["id"] || attachment[:id] || (index + 1),
-          "name" => attachment["name"] || attachment[:name],
-          "content_type" => attachment["content_type"] || attachment[:content_type] || "",
-          "size" => (attachment["size"] || attachment[:size] || 0).to_i,
-          "description" => attachment["description"] || attachment[:description] || "",
-          "uploaded_by" => attachment["uploaded_by"] || attachment[:uploaded_by] || "agent",
-          "created_at" => attachment["created_at"] || attachment[:created_at] || Time.now.utc.iso8601
+          "id" => DomainNormalization.hash_value(attachment, "id", index + 1),
+          "name" => DomainNormalization.hash_value(attachment, "name"),
+          "content_type" => DomainNormalization.hash_value(attachment, "content_type", ""),
+          "size" => DomainNormalization.hash_value(attachment, "size", 0).to_i,
+          "description" => DomainNormalization.hash_value(attachment, "description", ""),
+          "uploaded_by" => DomainNormalization.hash_value(attachment, "uploaded_by", "agent"),
+          "created_at" => DomainNormalization.hash_value(attachment, "created_at", Time.now.utc.iso8601)
         }
       end
       self.custom_fields = normalize_custom_fields(attrs.fetch(:custom_fields, custom_fields))
       self.ticket_type = new_ticket_type
-      self.merged_into_id = attrs.key?(:merged_into_id) ? attrs[:merged_into_id].to_i : merged_into_id.to_i
-      self.merged_into_id = nil if self.merged_into_id.zero?
-      self.merged_from_ids = Array(attrs.fetch(:merged_from_ids, merged_from_ids)).map(&:to_i).reject(&:zero?).uniq.sort
-      self.related_ids = Array(attrs.fetch(:related_ids, related_ids)).map(&:to_i).reject(&:zero?).uniq.sort
-      self.parent_id = attrs.key?(:parent_id) ? attrs[:parent_id].to_i : parent_id.to_i
-      self.parent_id = nil if self.parent_id.zero?
-      self.child_ids = Array(attrs.fetch(:child_ids, child_ids)).map(&:to_i).reject(&:zero?).uniq.sort
-      self.dependency_ids = Array(attrs.fetch(:dependency_ids, dependency_ids)).map(&:to_i).reject(&:zero?).uniq.sort
+      self.merged_into_id = DomainNormalization.optional_id(attrs.key?(:merged_into_id) ? attrs[:merged_into_id] : merged_into_id)
+      self.merged_from_ids = DomainNormalization.ids(attrs.fetch(:merged_from_ids, merged_from_ids))
+      self.related_ids = DomainNormalization.ids(attrs.fetch(:related_ids, related_ids))
+      self.parent_id = DomainNormalization.optional_id(attrs.key?(:parent_id) ? attrs[:parent_id] : parent_id)
+      self.child_ids = DomainNormalization.ids(attrs.fetch(:child_ids, child_ids))
+      self.dependency_ids = DomainNormalization.ids(attrs.fetch(:dependency_ids, dependency_ids))
       if attrs.key?(:pinned)
         self.pinned = !!attrs[:pinned]
         self.pinned_at = pinned? ? (attrs.fetch(:pinned_at, pinned_at) || Time.now.utc.iso8601) : nil
@@ -470,24 +468,24 @@ module Helpdesk
     end
 
     def add_tag(tag)
-      tag = tag.to_s.strip
+      tag = DomainNormalization.present_string(tag)
       return if tag.empty?
 
-      self.tags = (tags + [tag]).map(&:strip).reject(&:empty?).uniq.sort
+      self.tags = DomainNormalization.tags(tags + [tag])
       self.updated_at = Time.now.utc.iso8601
     end
 
     def add_attachment(name:, content_type: "", size: 0, description: "", uploaded_by: "agent")
-      name = name.to_s.strip
+      name = DomainNormalization.present_string(name)
       return if name.empty?
 
       self.attachments << {
         "id" => next_attachment_id,
         "name" => name,
-        "content_type" => content_type.to_s.strip,
+        "content_type" => DomainNormalization.present_string(content_type),
         "size" => size.to_i,
-        "description" => description.to_s.strip,
-        "uploaded_by" => uploaded_by.to_s.strip.empty? ? "agent" : uploaded_by.to_s.strip,
+        "description" => DomainNormalization.present_string(description),
+        "uploaded_by" => DomainNormalization.present_string(uploaded_by).empty? ? "agent" : DomainNormalization.present_string(uploaded_by),
         "created_at" => Time.now.utc.iso8601
       }
       self.attachments = attachments.sort_by { |attachment| attachment["id"].to_i }
@@ -495,7 +493,7 @@ module Helpdesk
     end
 
     def set_custom_field(key, value)
-      key = key.to_s.strip
+      key = DomainNormalization.present_string(key)
       return if key.empty?
 
       self.custom_fields = (custom_fields || {}).merge(key => value.to_s)
@@ -503,7 +501,7 @@ module Helpdesk
     end
 
     def remove_custom_field(key)
-      key = key.to_s.strip
+      key = DomainNormalization.present_string(key)
       return if key.empty?
 
       self.custom_fields = (custom_fields || {}).reject { |existing_key, _| existing_key.to_s.casecmp?(key) }
@@ -563,7 +561,7 @@ module Helpdesk
     end
 
     def remove_tag(tag)
-      tag = tag.to_s.strip
+      tag = DomainNormalization.present_string(tag)
       self.tags = tags.reject { |existing| existing.casecmp?(tag) }
       self.updated_at = Time.now.utc.iso8601
     end
@@ -765,11 +763,7 @@ module Helpdesk
     end
 
     def normalize_priority(value)
-      value = value.to_s.strip
-      return "medium" if value.empty?
-      return value if PRIORITIES.include?(value)
-
-      raise ArgumentError, "invalid priority: #{value}"
+      DomainNormalization.enum(value, allowed: PRIORITIES, default: "medium", label: "priority")
     end
 
     def normalize_due_at(value)
@@ -800,46 +794,19 @@ module Helpdesk
     end
 
     def normalize_pinned(value)
-      case value
-      when true, false
-        value
-      when nil
-        false
-      else
-        %w[true yes on 1].include?(value.to_s.strip.downcase)
-      end
+      DomainNormalization.boolean(value)
     end
 
     def normalize_archived(value)
-      case value
-      when true, false
-        value
-      when nil
-        false
-      else
-        %w[true yes on 1].include?(value.to_s.strip.downcase)
-      end
+      DomainNormalization.boolean(value)
     end
 
     def normalize_deleted(value)
-      case value
-      when true, false
-        value
-      when nil
-        false
-      else
-        %w[true yes on 1].include?(value.to_s.strip.downcase)
-      end
+      DomainNormalization.boolean(value)
     end
 
     def normalize_custom_fields(value)
-      hash = value.is_a?(Hash) ? value : {}
-      hash.each_with_object({}) do |(key, val), normalized|
-        key = key.to_s.strip
-        next if key.empty?
-
-        normalized[key] = val.to_s
-      end
+      DomainNormalization.custom_fields(value)
     end
 
     public
@@ -920,11 +887,13 @@ module Helpdesk
     private
 
     def normalize_ticket_type(value)
-      value = value.to_s.strip.downcase
-      value = "general" if value.empty?
-      return value if %w[general bug feature incident].include?(value)
-
-      raise ArgumentError, "invalid ticket type: #{value}"
+      DomainNormalization.enum(
+        value,
+        allowed: %w[general bug feature incident],
+        default: "general",
+        label: "ticket type",
+        downcase: true
+      )
     end
 
     def next_comment_id

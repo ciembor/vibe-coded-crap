@@ -1,4 +1,5 @@
 require "shellwords"
+require "date"
 require "time"
 require "json"
 require "fileutils"
@@ -7,6 +8,7 @@ require "helpdesk/api_token_store"
 require "helpdesk/hook_store"
 require "helpdesk/escalation_rule_store"
 require "helpdesk/store"
+require "helpdesk/ticket"
 require "helpdesk/sla_rule_store"
 require "helpdesk/sort_rule_store"
 require "helpdesk/profile_store"
@@ -104,7 +106,6 @@ module Helpdesk
           status ID STATUS
           comment ID TEXT
           note ID TEXT
-          new [TEMPLATE]
           watch add ID USER_ID
           watch remove ID USER_ID
           watch list ID
