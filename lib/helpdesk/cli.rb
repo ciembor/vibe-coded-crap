@@ -2446,29 +2446,33 @@ module Helpdesk
       loop do
         puts
         puts "Interactive Menu"
-        puts "1) Dashboard"
-        puts "2) List tickets"
-        puts "3) Show ticket"
-        puts "4) New ticket"
-        puts "5) Search tickets"
-        puts "6) Who am I"
-        puts "0) Exit menu"
+        puts "d) Dashboard"
+        puts "l) List tickets"
+        puts "s) Show ticket"
+        puts "n) New ticket"
+        puts "f) Search tickets"
+        puts "w) Who am I"
+        puts "h) Help"
+        puts "q) Exit menu"
+        puts "Shortcuts: d l s n f w h q"
 
-        choice = prompt("Choose an option", "0")
-        case choice
-        when "1"
+        choice = prompt("Choose an option", "q")
+        case normalize_menu_choice(choice)
+        when "d"
           dashboard
-        when "2"
+        when "l"
           list([])
-        when "3"
+        when "s"
           show([prompt("Ticket ID")])
-        when "4"
+        when "n"
           create_ticket([])
-        when "5"
+        when "f"
           search([prompt("Search query")])
-        when "6"
+        when "w"
           whoami
-        when "0", "q", "quit"
+        when "h"
+          puts "Shortcuts: d dashboard, l list, s show, n new, f search, w whoami, q quit"
+        when "q"
           puts "Leaving menu."
           break
         else
@@ -3604,6 +3608,10 @@ module Helpdesk
 
     def resolve_alias(command)
       command_aliases.fetch(command.to_s, command.to_s)
+    end
+
+    def normalize_menu_choice(choice)
+      choice.to_s.strip.downcase
     end
 
     def command_aliases
