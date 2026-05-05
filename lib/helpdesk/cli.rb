@@ -16,6 +16,7 @@ require "helpdesk/user_store"
 require "helpdesk/session_store"
 require "helpdesk/workflow_store"
 require "helpdesk/webhook_store"
+require "helpdesk/cli_command_router"
 
 module Helpdesk
   class CLI
@@ -30,6 +31,7 @@ module Helpdesk
       @api_rate_limit = API_RATE_LIMIT
       @api_rate_window_seconds = API_RATE_WINDOW_SECONDS
       @api_response_cache = {}
+      @command_router = CliCommandRouter.new
       @debug_enabled = env_debug_enabled? || @session.debug_enabled
       persist_debug_setting!
       debug_log("debug mode enabled")
@@ -47,71 +49,13 @@ module Helpdesk
 
         command, *args = Shellwords.split(line)
         command = resolve_alias(command)
-        case command
-        when "help" then print_help
-        when "list" then list(args)
-        when "show" then show(args)
-        when "new" then create_ticket(args)
-        when "edit" then edit_ticket(args)
-        when "delete" then delete_ticket(args)
-        when "restore" then restore_ticket(args)
-        when "close" then close_tickets(args)
-        when "undo" then undo(args)
-        when "merge" then merge_tickets(args)
-        when "relate" then manage_relationships(args)
-        when "parent" then manage_hierarchy(args)
-        when "dependency" then manage_dependencies(args)
-        when "status" then change_status(args)
-        when "comment" then add_comment(args)
-        when "note" then add_note(args)
-        when "watch" then manage_watchers(args)
-        when "attach" then manage_attachments(args)
-        when "pin" then manage_pins(args)
-        when "archive" then manage_archives(args)
-        when "tag" then manage_tags(args)
-        when "search" then search(args)
-        when "searches" then list_saved_searches
-        when "filter" then filter(args)
-        when "filters" then list_favorite_filters
-        when "field" then manage_custom_fields(args)
-        when "template" then manage_templates(args)
-        when "activity" then activity(args)
-        when "overdue" then overdue
-        when "sla" then manage_sla(args)
-        when "escalation" then manage_escalation(args)
-        when "escalations" then escalations
-        when "escalate" then escalate_ticket(args)
-        when "analytics" then analytics(args)
-        when "report" then report(args)
-        when "sort" then manage_sorting(args)
-        when "workflow" then manage_workflows(args)
-        when "duplicates" then duplicates(args)
-        when "remind" then remind(args)
-        when "reminders" then reminders
-        when "dashboard" then dashboard
-        when "stats" then dashboard
-        when "export" then export(args)
-        when "import" then import(args)
-        when "users" then list_users
-        when "user" then manage_users(args)
-        when "notify" then manage_notifications(args)
-        when "whoami" then whoami
-        when "audit" then audit(args)
-        when "api" then api(args)
-        when "hook" then manage_hooks(args)
-        when "hooks" then list_hooks
-        when "plugin" then manage_plugins(args)
-        when "plugins" then list_plugins
-        when "webhook" then manage_webhooks(args)
-        when "webhooks" then list_webhooks
-        when "aliases" then list_aliases
-        when "menu" then interactive_menu(args)
-        when "profile" then manage_profiles(args)
-        when "profiles" then list_profiles
-        when "session" then manage_session(args)
-        when "debug" then manage_debug(args)
-        when "exit", "quit" then break
-        else
+
+        case @command_router.dispatch(self, command, args)
+        when :handled
+          next
+        when :exit
+          break
+        when :unknown
           if run_plugin_command(command, args)
             next
           end
