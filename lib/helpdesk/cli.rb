@@ -12,6 +12,7 @@ require "helpdesk/sla_rule_store"
 require "helpdesk/sort_rule_store"
 require "helpdesk/template_store"
 require "helpdesk/user_store"
+require "helpdesk/session_store"
 require "helpdesk/workflow_store"
 require "helpdesk/webhook_store"
 
@@ -29,6 +30,7 @@ module Helpdesk
       @sort_rules = SortRuleStore.new
       @templates = TemplateStore.new
       @users = UserStore.new
+      @session = SessionStore.new
       @api_tokens = ApiTokenStore.new
       @hooks = HookStore.new
       @plugins = PluginStore.new
@@ -41,7 +43,7 @@ module Helpdesk
       @escalation_rules.reload_ticket_rules!
       @sla_rules.reload_ticket_rules!
       seed_default_user
-      @current_user = @users.all.first
+      load_session_user!
     end
 
     def run
@@ -115,6 +117,7 @@ module Helpdesk
         when "webhooks" then list_webhooks
         when "aliases" then list_aliases
         when "menu" then interactive_menu(args)
+        when "session" then manage_session(args)
         when "exit", "quit" then break
         else
           if run_plugin_command(command, args)
@@ -250,6 +253,8 @@ module Helpdesk
           hook test ID [EVENT]
           aliases
           menu
+          session show
+          session clear
           plugins
           plugin add NAME COMMAND
           plugin remove ID
@@ -1900,6 +1905,7 @@ module Helpdesk
         role = prompt("Role (admin, agent, viewer)", "agent")
         user = @users.create(name: name, email: email, role: role)
         @current_user ||= user
+        persist_current_user_session!
         log_action("user.create", "user ##{user.id}", name: user.name, role: user.role_label)
         puts "Created user ##{user.id}."
       when "switch"
@@ -1908,6 +1914,7 @@ module Helpdesk
 
         log_action("user.switch", "user ##{user.id}", name: user.name, role: user.role_label)
         @current_user = user
+        persist_current_user_session!
         puts "Switched to #{user.display_name}."
       when "role"
         return unless require_permission!(:admin)
@@ -2200,6 +2207,26 @@ module Helpdesk
       end
     end
 
+    def manage_session(args)
+      action = args[0]
+      case action
+      when nil, "show"
+        if @current_user
+          puts "Current session user: ##{@current_user.id} #{@current_user.display_name} (role: #{@current_user.role_label})"
+          puts "Session file: #{@session.path}"
+        else
+          puts "No current session user."
+        end
+      when "clear"
+        @session.clear!
+        @current_user = @users.all.first
+        persist_current_user_session!
+        puts "Cleared session user."
+      else
+        puts "Usage: session show | session clear"
+      end
+    end
+
     def list_plugins
       plugins = @plugins.all
       if plugins.empty?
@@ -2210,6 +2237,21 @@ module Helpdesk
       plugins.each do |plugin|
         puts "##{plugin["id"]} #{plugin["name"]} command=#{plugin["command"]} enabled=#{plugin["enabled"]}"
       end
+    end
+
+    def load_session_user!
+      return if @session.nil? || @users.nil?
+
+      user = @users.find(@session.current_user_id)
+      user ||= @users.all.first
+      @current_user = user
+      persist_current_user_session!
+    end
+
+    def persist_current_user_session!
+      return if @session.nil?
+
+      @session.current_user_id = @current_user&.id
     end
 
     def api_json_response(status, data = {}, error = nil, meta = {})
