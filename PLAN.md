@@ -6,10 +6,10 @@ This plan treats reduced complexity as the success metric. Each stage should lea
   Add characterization tests for the core ticket model, ticket persistence, and external dispatch stores; document the full staged refactor so later changes are checked against stable behavior.
 - [x] Stage 2: Centralize JSON file persistence.
   Replace repeated `load_data`, `save!`, directory creation, and `next_id` code with one deep persistence module that owns JSON parsing, default payloads, atomic writes, sorting, and ID allocation.
-- [ ] Stage 3: Move record normalization into owned value objects.
-  Extract repeated hash normalization for append-only entries, attachments, webhooks, hooks, API tokens, plugins, templates, and users so public stores expose semantic operations rather than mutable storage hashes.
-- [ ] Stage 4: Split ticket policy from ticket state.
-  Move workflow, SLA, escalation, reminder, duplicate, and validation rules behind cohesive policy objects so `Ticket` is responsible for ticket state and small domain mutations only.
+- [x] Stage 3: Move external records into owned value objects.
+  Extract event subscription, hook, webhook, plugin, and API token normalization so stores expose semantic operations without owning wildcard matching, command rendering, token creation, or rate-window mutation details.
+- [ ] Stage 4: Split ticket child records and policy from ticket state.
+  Move comments, internal notes, attachments, workflow, SLA, escalation, reminder, duplicate, and validation rules behind cohesive objects so `Ticket` is responsible for ticket state and small domain mutations only.
 - [ ] Stage 5: Deepen `Helpdesk::Store`.
   Turn ticket persistence into a repository with a small public contract, then move merge/import, relationship management, bulk actions, and dependency closure checks into focused domain services that hide row indexing and raw hash mutation.
 - [ ] Stage 6: Replace the CLI command switch with a command registry.
