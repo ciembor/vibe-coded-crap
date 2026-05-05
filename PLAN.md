@@ -2,7 +2,7 @@
 
 This plan is intentionally unchecked. Mark a stage only after that stage has actually been completed.
 
-- [ ] Stage 1: Establish a characterization test suite.
+- [x] Stage 1: Establish a characterization test suite.
   Add public-contract tests around tickets, stores, CLI smoke paths, imports, workflows, API tokens, hooks, webhooks, plugins, notifications, and reporting before changing behavior.
 - [ ] Stage 2: Centralize JSON persistence.
   Move JSON loading, default payloads, directory creation, atomic writes, parser recovery, and ID allocation into one storage abstraction used by all stores.

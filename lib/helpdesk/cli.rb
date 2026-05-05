@@ -1458,7 +1458,7 @@ module Helpdesk
       recent_tickets = tickets.sort_by { |ticket| ticket.updated_at.to_s }.reverse.take(5)
       open_tickets = tickets.select { |ticket| %w[open in_progress waiting].include?(ticket.status) }
       oldest_open_ticket = open_tickets.min_by { |ticket| ticket.created_at.to_s }
-      tag_counts = tickets.flat_map(&:tags).tally.sort_by { |tag, count| [-count, tag] }.first(5)
+      tag_counts = tickets.flat_map(&:tags).each_with_object(Hash.new(0)) { |tag, counts| counts[tag] += 1 }.sort_by { |tag, count| [-count, tag] }.first(5)
 
       puts "Dashboard"
       puts "Total tickets: #{tickets.count}"
@@ -3256,7 +3256,7 @@ module Helpdesk
 
     def print_top_tags(tickets)
       puts "Top tags:"
-      tag_counts = tickets.flat_map(&:tags).tally.sort_by { |tag, count| [-count, tag] }.first(5)
+      tag_counts = tickets.flat_map(&:tags).each_with_object(Hash.new(0)) { |tag, counts| counts[tag] += 1 }.sort_by { |tag, count| [-count, tag] }.first(5)
       if tag_counts.empty?
         puts "  none"
       else
