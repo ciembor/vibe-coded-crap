@@ -1,12 +1,15 @@
-require "helpdesk/json_file"
-require "helpdesk/webhook_definition"
+require "json"
+require "fileutils"
+require "time"
 
 module Helpdesk
   class WebhookStore
-    include JsonFileStore
+    attr_reader :path
 
     def initialize(path: default_path)
-      configure_json_file(path, default: [])
+      @path = path
+      FileUtils.mkdir_p(File.dirname(path))
+      save!([]) unless File.exist?(path)
     end
 
     def all
@@ -19,7 +22,18 @@ module Helpdesk
 
     def create(attrs)
       webhooks = load_data
-      webhook = WebhookDefinition.create(id: next_id(webhooks), attrs: attrs)
+      webhook = {
+        "id" => next_id(webhooks),
+        "name" => attrs.fetch(:name).to_s.strip,
+        "url" => attrs.fetch(:url).to_s.strip,
+        "events" => normalize_events(attrs.fetch(:events, [])),
+        "enabled" => attrs.fetch(:enabled, true),
+        "created_at" => Time.now.utc.iso8601,
+        "updated_at" => Time.now.utc.iso8601
+      }
+      raise ArgumentError, "webhook name cannot be empty" if webhook["name"].empty?
+      raise ArgumentError, "webhook url cannot be empty" if webhook["url"].empty?
+
       webhooks << webhook
       save!(webhooks)
       webhook
@@ -37,15 +51,24 @@ module Helpdesk
       index = webhooks.index { |row| row["id"].to_i == id.to_i }
       return nil unless index
 
-      webhook = WebhookDefinition.from_h(webhooks[index]).update(attrs)
+      webhook = webhooks[index].dup
+      webhook["name"] = attrs[:name].to_s.strip if attrs.key?(:name)
+      webhook["url"] = attrs[:url].to_s.strip if attrs.key?(:url)
+      webhook["events"] = normalize_events(attrs[:events]) if attrs.key?(:events)
+      webhook["enabled"] = attrs[:enabled] if attrs.key?(:enabled)
+      webhook["updated_at"] = Time.now.utc.iso8601
+      raise ArgumentError, "webhook name cannot be empty" if webhook["name"].to_s.strip.empty?
+      raise ArgumentError, "webhook url cannot be empty" if webhook["url"].to_s.strip.empty?
+
       webhooks[index] = webhook
       save!(webhooks)
       webhook
     end
 
     def matching(event)
+      normalized_event = event.to_s.strip
       all.select do |webhook|
-        WebhookDefinition.from_h(webhook).matches?(event)
+        webhook["enabled"] != false && subscribed_to_event?(webhook, normalized_event)
       end
     end
 
@@ -55,5 +78,33 @@ module Helpdesk
       File.expand_path("../../data/webhooks.json", __dir__)
     end
 
+    def load_data
+      JSON.parse(File.read(path))
+    rescue Errno::ENOENT, JSON::ParserError
+      []
+    end
+
+    def save!(webhooks)
+      File.write(path, JSON.pretty_generate(webhooks))
+    end
+
+    def next_id(rows)
+      (rows.map { |row| row["id"].to_i }.max || 0) + 1
+    end
+
+    def normalize_events(events)
+      Array(events).flat_map { |event| event.to_s.split(",") }.map { |event| event.strip }.reject(&:empty?).uniq.sort
+    end
+
+    def subscribed_to_event?(webhook, event)
+      events = Array(webhook["events"]).map(&:to_s)
+      return true if events.empty?
+      return true if events.include?("*")
+      return true if events.include?(event)
+
+      events.any? do |subscribed|
+        subscribed.end_with?("*") && event.start_with?(subscribed.delete_suffix("*"))
+      end
+    end
   end
 end

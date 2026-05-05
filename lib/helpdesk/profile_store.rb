@@ -1,12 +1,15 @@
+require "json"
+require "fileutils"
 require "time"
-require "helpdesk/json_file"
 
 module Helpdesk
   class ProfileStore
-    include JsonFileStore
+    attr_reader :path
 
     def initialize(path: default_path)
-      configure_json_file(path, default: default_payload)
+      @path = path
+      FileUtils.mkdir_p(File.dirname(path))
+      save!(default_payload) unless File.exist?(path)
       ensure_default_profile!
     end
 
@@ -91,8 +94,14 @@ module Helpdesk
     end
 
     def load_data
-      data = super
-      data.is_a?(Hash) ? data : default_payload
+      parsed = JSON.parse(File.read(path))
+      parsed.is_a?(Hash) ? parsed : default_payload
+    rescue Errno::ENOENT, JSON::ParserError
+      default_payload
+    end
+
+    def save!(payload)
+      File.write(path, JSON.pretty_generate(payload))
     end
 
     def normalize_profile(name, attrs)
