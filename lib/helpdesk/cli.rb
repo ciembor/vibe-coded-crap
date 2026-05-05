@@ -5,6 +5,7 @@ require "json"
 require "fileutils"
 require "helpdesk/audit_log"
 require "helpdesk/api_token_store"
+require "helpdesk/hook_store"
 require "helpdesk/escalation_rule_store"
 require "helpdesk/store"
 require "helpdesk/sla_rule_store"
@@ -29,6 +30,7 @@ module Helpdesk
       @templates = TemplateStore.new
       @users = UserStore.new
       @api_tokens = ApiTokenStore.new
+      @hooks = HookStore.new
       @workflows = WorkflowStore.new
       @webhooks = WebhookStore.new
       reload_ticket_workflows!
@@ -103,6 +105,8 @@ module Helpdesk
         when "whoami" then whoami
         when "audit" then audit(args)
         when "api" then api(args)
+        when "hook" then manage_hooks(args)
+        when "hooks" then list_hooks
         when "webhook" then manage_webhooks(args)
         when "webhooks" then list_webhooks
         when "exit", "quit" then break
@@ -230,6 +234,10 @@ module Helpdesk
           api tokens list
           api tokens create NAME [USER_ID]
           api tokens revoke ID
+          hooks
+          hook add NAME EVENT COMMAND
+          hook remove ID
+          hook test ID [EVENT]
           webhooks
           webhook add NAME URL [EVENT ...]
           webhook remove ID
@@ -2157,6 +2165,18 @@ module Helpdesk
       end
     end
 
+    def list_hooks
+      hooks = @hooks.all
+      if hooks.empty?
+        puts "No hooks."
+        return
+      end
+
+      hooks.each do |hook|
+        puts "##{hook["id"]} #{hook["name"]} command=#{hook["command"]} events=#{Array(hook["events"]).join(",")}"
+      end
+    end
+
     def api_json_response(status, data = {}, error = nil, meta = {})
       payload = { status: status }
       payload["error"] = error if error
@@ -2269,6 +2289,52 @@ module Helpdesk
         deliver_webhook(webhook, webhook_payload(event, "webhook ##{webhook["id"]}", details))
       else
         puts "Usage: webhook add NAME URL [EVENT ...] | webhook remove ID | webhook test ID [EVENT] [--fail|--flaky]"
+      end
+    rescue ArgumentError => e
+      puts e.message
+    end
+
+    def manage_hooks(args)
+      action = args[0]
+      case action
+      when "add"
+        return unless require_permission!(:admin)
+
+        name = args[1]
+        event = args[2]
+        command = Shellwords.join(args.drop(3))
+        if name.to_s.strip.empty? || event.to_s.strip.empty? || command.to_s.strip.empty?
+          puts "Usage: hook add NAME EVENT COMMAND"
+          return
+        end
+
+        hook = @hooks.create(name: name, events: [event], command: command)
+        log_action("hook.create", "hook ##{hook["id"]}", name: hook["name"], events: hook["events"])
+        puts "Created hook ##{hook["id"]}."
+      when "remove"
+        return unless require_permission!(:admin)
+
+        id = required_id(args.drop(1))
+        if @hooks.delete(id)
+          log_action("hook.delete", "hook ##{id}")
+          puts "Removed hook ##{id}."
+        else
+          puts "Hook not found."
+        end
+      when "test"
+        return unless require_permission!(:admin)
+
+        id = required_id(args.drop(1))
+        hook = @hooks.find(id)
+        return puts "Hook not found." unless hook
+
+        event = args[2].to_s.strip
+        event = Array(hook["events"]).first.to_s if event.empty?
+        event = "hook.test" if event.empty?
+        payload = hook_payload(event, "hook ##{hook["id"]}", { "test" => true }, actor: current_user_name)
+        deliver_hook(hook, payload)
+      else
+        puts "Usage: hook add NAME EVENT COMMAND | hook remove ID | hook test ID [EVENT]"
       end
     rescue ArgumentError => e
       puts e.message
@@ -3225,7 +3291,15 @@ module Helpdesk
     def log_action(action, subject, details = {})
       actor = @current_user ? @current_user.display_name : "system"
       @audit_log.append(action: action, actor: actor, subject: subject, details: details)
+      dispatch_hooks(action, actor, subject, details)
       dispatch_webhooks(action, actor, subject, details)
+    end
+
+    def dispatch_hooks(action, actor, subject, details)
+      @hooks.matching(action).each do |hook|
+        payload = hook_payload(action, subject, details, actor: actor)
+        deliver_hook(hook, payload)
+      end
     end
 
     def dispatch_webhooks(action, actor, subject, details)
@@ -3243,6 +3317,44 @@ module Helpdesk
         "details" => details,
         "created_at" => Time.now.utc.iso8601
       }
+    end
+
+    def hook_payload(action, subject, details, actor: nil)
+      webhook_payload(action, subject, details, actor: actor)
+    end
+
+    def deliver_hook(hook, payload)
+      command = hook["command"].to_s.strip
+      env = {
+        "HELPDESK_HOOK_ID" => hook["id"].to_s,
+        "HELPDESK_HOOK_NAME" => hook["name"].to_s,
+        "HELPDESK_HOOK_EVENT" => payload["action"].to_s,
+        "HELPDESK_HOOK_SUBJECT" => payload["subject"].to_s,
+        "HELPDESK_HOOK_ACTOR" => payload["actor"].to_s,
+        "HELPDESK_HOOK_DETAILS" => JSON.generate(payload["details"] || {}),
+        "HELPDESK_HOOK_PAYLOAD" => JSON.generate(payload)
+      }
+
+      puts "[hook mock] Running hook ##{hook["id"]} #{hook["name"]}: #{command}"
+      success = system(env, command)
+      if success
+        puts "[hook mock] Completed."
+      else
+        status = $?.respond_to?(:exitstatus) ? $?.exitstatus : nil
+        puts "[hook mock] Failed#{status ? " (exit #{status})" : ""}."
+      end
+
+      @audit_log.append(
+        action: "hook.trigger",
+        actor: payload["actor"],
+        subject: "hook ##{hook["id"]}",
+        details: {
+          event: payload["action"],
+          target: payload["subject"],
+          success: success
+        }
+      )
+      success
     end
 
     def deliver_webhook(webhook, payload)
@@ -3329,6 +3441,7 @@ module Helpdesk
         action.start_with?("reminder.") ||
         action.start_with?("notification.") ||
         action.start_with?("user.") ||
+        action.start_with?("hook.") ||
         action.start_with?("escalation.") ||
         action == "tickets.import"
     end
@@ -3361,6 +3474,12 @@ module Helpdesk
           "deleted #{subject}"
         when "ticket.restore"
           "restored #{subject}"
+        when "hook.create"
+          "created #{subject}"
+        when "hook.delete"
+          "removed #{subject}"
+        when "hook.trigger"
+          "triggered #{subject}"
         when "ticket.close"
           "closed #{subject}"
         when "ticket.status"
