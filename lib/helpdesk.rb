@@ -1,4 +1,5 @@
 require "helpdesk/version"
+require "helpdesk/json_file"
 require "helpdesk/audit_log"
 require "helpdesk/user"
 require "helpdesk/user_store"
