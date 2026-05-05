@@ -9,7 +9,7 @@ module Helpdesk
     def initialize(path: default_path)
       @path = path
       FileUtils.mkdir_p(File.dirname(path))
-      save!("current_user_id" => nil, "updated_at" => Time.now.utc.iso8601) unless File.exist?(path)
+      save!(default_payload) unless File.exist?(path)
     end
 
     def current_user_id
@@ -17,7 +17,21 @@ module Helpdesk
     end
 
     def current_user_id=(value)
-      save!("current_user_id" => value.nil? ? nil : value.to_i, "updated_at" => Time.now.utc.iso8601)
+      data = load_data
+      data["current_user_id"] = value.nil? ? nil : value.to_i
+      data["updated_at"] = Time.now.utc.iso8601
+      save!(data)
+    end
+
+    def debug_enabled
+      !!load_data["debug_enabled"]
+    end
+
+    def debug_enabled=(value)
+      data = load_data
+      data["debug_enabled"] = !!value
+      data["updated_at"] = Time.now.utc.iso8601
+      save!(data)
     end
 
     def clear!
@@ -34,11 +48,19 @@ module Helpdesk
       File.expand_path("../../data/session.json", __dir__)
     end
 
+    def default_payload
+      {
+        "current_user_id" => nil,
+        "debug_enabled" => false,
+        "updated_at" => Time.now.utc.iso8601
+      }
+    end
+
     def load_data
       data = JSON.parse(File.read(path))
       data.is_a?(Hash) ? data : {}
     rescue Errno::ENOENT, JSON::ParserError
-      {}
+      default_payload
     end
 
     def save!(payload)

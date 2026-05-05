@@ -30,6 +30,9 @@ module Helpdesk
       @api_rate_limit = API_RATE_LIMIT
       @api_rate_window_seconds = API_RATE_WINDOW_SECONDS
       @api_response_cache = {}
+      @debug_enabled = env_debug_enabled? || @session.debug_enabled
+      persist_debug_setting!
+      debug_log("debug mode enabled")
     end
 
     def run
@@ -106,6 +109,7 @@ module Helpdesk
         when "profile" then manage_profiles(args)
         when "profiles" then list_profiles
         when "session" then manage_session(args)
+        when "debug" then manage_debug(args)
         when "exit", "quit" then break
         else
           if run_plugin_command(command, args)
@@ -249,6 +253,7 @@ module Helpdesk
           profile delete NAME
           session show
           session clear
+          debug on|off|show
           plugins
           plugin add NAME COMMAND
           plugin remove ID
@@ -2290,6 +2295,26 @@ module Helpdesk
       end
     end
 
+    def manage_debug(args)
+      action = args[0]
+      case action
+      when nil, "show"
+        puts "Debug logging: #{@debug_enabled ? 'on' : 'off'}"
+        puts "Session file: #{@session.path}"
+      when "on"
+        @debug_enabled = true
+        persist_debug_setting!
+        debug_log("debug mode enabled")
+        puts "Debug logging enabled."
+      when "off"
+        @debug_enabled = false
+        persist_debug_setting!
+        puts "Debug logging disabled."
+      else
+        puts "Usage: debug on | debug off | debug show"
+      end
+    end
+
     def list_plugins
       plugins = @plugins.all
       if plugins.empty?
@@ -3540,9 +3565,26 @@ module Helpdesk
 
     def log_action(action, subject, details = {})
       actor = @current_user ? @current_user.display_name : "system"
+      debug_log("action=#{action} actor=#{actor} subject=#{subject} details=#{details.inspect}")
       @audit_log.append(action: action, actor: actor, subject: subject, details: details)
       dispatch_hooks(action, actor, subject, details)
       dispatch_webhooks(action, actor, subject, details)
+    end
+
+    def debug_log(message)
+      return unless @debug_enabled
+
+      puts "[debug] #{Time.now.utc.iso8601} #{message}"
+    end
+
+    def persist_debug_setting!
+      return if @session.nil?
+
+      @session.debug_enabled = @debug_enabled
+    end
+
+    def env_debug_enabled?
+      %w[1 true yes on].include?(ENV.fetch("HELPDESK_DEBUG", "").to_s.strip.downcase)
     end
 
     def run_plugin_command(command, args)
