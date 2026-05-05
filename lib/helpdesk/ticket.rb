@@ -1,5 +1,8 @@
 require "date"
 require "time"
+require "helpdesk/ticket_entry"
+require "helpdesk/ticket_attachment"
+require "helpdesk/ticket_type_policy"
 
 module Helpdesk
   class Ticket
@@ -341,34 +344,10 @@ module Helpdesk
       self.parent_id = parent_id.to_i.zero? ? nil : parent_id.to_i
       self.child_ids = Array(child_ids).map(&:to_i).reject(&:zero?).uniq.sort
       self.dependency_ids = Array(dependency_ids).map(&:to_i).reject(&:zero?).uniq.sort
-      self.comments = Array(comments).map do |comment|
-        {
-          "id" => comment["id"] || comment[:id],
-          "body" => comment["body"] || comment[:body],
-          "author" => comment["author"] || comment[:author] || "agent",
-          "created_at" => comment["created_at"] || comment[:created_at] || Time.now.utc.iso8601
-        }
-      end
-      self.internal_notes = Array(internal_notes).map do |note|
-        {
-          "id" => note["id"] || note[:id],
-          "body" => note["body"] || note[:body],
-          "author" => note["author"] || note[:author] || "agent",
-          "created_at" => note["created_at"] || note[:created_at] || Time.now.utc.iso8601
-        }
-      end
+      self.comments = TicketEntry.normalize_many(comments)
+      self.internal_notes = TicketEntry.normalize_many(internal_notes)
       self.watchers = Array(watchers).map { |watcher| watcher.to_i }.reject(&:zero?).uniq.sort
-      self.attachments = Array(attachments).each_with_index.map do |attachment, index|
-        {
-          "id" => attachment["id"] || attachment[:id] || (index + 1),
-          "name" => attachment["name"] || attachment[:name],
-          "content_type" => attachment["content_type"] || attachment[:content_type] || "",
-          "size" => (attachment["size"] || attachment[:size] || 0).to_i,
-          "description" => attachment["description"] || attachment[:description] || "",
-          "uploaded_by" => attachment["uploaded_by"] || attachment[:uploaded_by] || "agent",
-          "created_at" => attachment["created_at"] || attachment[:created_at] || Time.now.utc.iso8601
-        }
-      end
+      self.attachments = TicketAttachment.normalize_many(attachments)
       self.custom_fields = normalize_custom_fields(custom_fields)
       self.pinned = normalize_pinned(pinned)
       self.pinned_at = pinned? ? (pinned_at || Time.now.utc.iso8601) : nil
@@ -393,17 +372,7 @@ module Helpdesk
       self.reminder_at = normalize_reminder_at(attrs.fetch(:reminder_at, reminder_at))
       self.reminder_repeat = normalize_reminder_repeat(attrs.fetch(:reminder_repeat, reminder_repeat))
       self.tags = Array(attrs.fetch(:tags, tags)).map { |tag| tag.to_s.strip }.reject(&:empty?).uniq.sort
-      self.attachments = Array(attrs.fetch(:attachments, attachments)).each_with_index.map do |attachment, index|
-        {
-          "id" => attachment["id"] || attachment[:id] || (index + 1),
-          "name" => attachment["name"] || attachment[:name],
-          "content_type" => attachment["content_type"] || attachment[:content_type] || "",
-          "size" => (attachment["size"] || attachment[:size] || 0).to_i,
-          "description" => attachment["description"] || attachment[:description] || "",
-          "uploaded_by" => attachment["uploaded_by"] || attachment[:uploaded_by] || "agent",
-          "created_at" => attachment["created_at"] || attachment[:created_at] || Time.now.utc.iso8601
-        }
-      end
+      self.attachments = TicketAttachment.normalize_many(attrs.fetch(:attachments, attachments))
       self.custom_fields = normalize_custom_fields(attrs.fetch(:custom_fields, custom_fields))
       self.ticket_type = new_ticket_type
       self.merged_into_id = attrs.key?(:merged_into_id) ? attrs[:merged_into_id].to_i : merged_into_id.to_i
@@ -433,22 +402,12 @@ module Helpdesk
     end
 
     def add_comment(body:, author: "agent")
-      self.comments << {
-        "id" => next_comment_id,
-        "body" => body,
-        "author" => author,
-        "created_at" => Time.now.utc.iso8601
-      }
+      self.comments << TicketEntry.build(comments, body: body, author: author)
       self.updated_at = Time.now.utc.iso8601
     end
 
     def add_internal_note(body:, author: "agent")
-      self.internal_notes << {
-        "id" => next_internal_note_id,
-        "body" => body,
-        "author" => author,
-        "created_at" => Time.now.utc.iso8601
-      }
+      self.internal_notes << TicketEntry.build(internal_notes, body: body, author: author)
       self.updated_at = Time.now.utc.iso8601
     end
 
@@ -475,18 +434,10 @@ module Helpdesk
     end
 
     def add_attachment(name:, content_type: "", size: 0, description: "", uploaded_by: "agent")
-      name = name.to_s.strip
-      return if name.empty?
+      attachment = TicketAttachment.build(attachments, name: name, content_type: content_type, size: size, description: description, uploaded_by: uploaded_by)
+      return unless attachment
 
-      self.attachments << {
-        "id" => next_attachment_id,
-        "name" => name,
-        "content_type" => content_type.to_s.strip,
-        "size" => size.to_i,
-        "description" => description.to_s.strip,
-        "uploaded_by" => uploaded_by.to_s.strip.empty? ? "agent" : uploaded_by.to_s.strip,
-        "created_at" => Time.now.utc.iso8601
-      }
+      self.attachments << attachment
       self.attachments = attachments.sort_by { |attachment| attachment["id"].to_i }
       self.updated_at = Time.now.utc.iso8601
     end
@@ -614,16 +565,7 @@ module Helpdesk
     end
 
     def validation_errors
-      errors = []
-      case ticket_type
-      when "bug"
-        errors << "bug tickets require a severity field" if custom_fields["severity"].to_s.strip.empty?
-      when "feature"
-        errors << "feature tickets require a requested_by field" if custom_fields["requested_by"].to_s.strip.empty?
-      when "incident"
-        errors << "incident tickets require an impact field" if custom_fields["impact"].to_s.strip.empty?
-      end
-      errors
+      TicketTypePolicy.validation_errors(ticket_type, custom_fields)
     end
 
     def due_date
@@ -959,23 +901,7 @@ module Helpdesk
     end
 
     def normalize_ticket_type(value)
-      value = value.to_s.strip.downcase
-      value = "general" if value.empty?
-      return value if %w[general bug feature incident].include?(value)
-
-      raise ArgumentError, "invalid ticket type: #{value}"
-    end
-
-    def next_comment_id
-      (comments.map { |comment| comment["id"].to_i }.max || 0) + 1
-    end
-
-    def next_internal_note_id
-      (internal_notes.map { |note| note["id"].to_i }.max || 0) + 1
-    end
-
-    def next_attachment_id
-      (attachments.map { |attachment| attachment["id"].to_i }.max || 0) + 1
+      TicketTypePolicy.normalize(value)
     end
 
     def normalized_duplicate_title
