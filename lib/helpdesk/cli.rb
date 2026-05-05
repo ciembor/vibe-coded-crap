@@ -31,6 +31,7 @@ module Helpdesk
       @users = UserStore.new
       @api_tokens = ApiTokenStore.new
       @hooks = HookStore.new
+      @plugins = PluginStore.new
       @workflows = WorkflowStore.new
       @webhooks = WebhookStore.new
       reload_ticket_workflows!
@@ -107,10 +108,16 @@ module Helpdesk
         when "api" then api(args)
         when "hook" then manage_hooks(args)
         when "hooks" then list_hooks
+        when "plugin" then manage_plugins(args)
+        when "plugins" then list_plugins
         when "webhook" then manage_webhooks(args)
         when "webhooks" then list_webhooks
         when "exit", "quit" then break
         else
+          if run_plugin_command(command, args)
+            next
+          end
+
           puts "Unknown command: #{command}. Type 'help'."
         end
       end
@@ -238,6 +245,10 @@ module Helpdesk
           hook add NAME EVENT COMMAND
           hook remove ID
           hook test ID [EVENT]
+          plugins
+          plugin add NAME COMMAND
+          plugin remove ID
+          plugin run NAME [ARGS...]
           webhooks
           webhook add NAME URL [EVENT ...]
           webhook remove ID
@@ -2177,6 +2188,18 @@ module Helpdesk
       end
     end
 
+    def list_plugins
+      plugins = @plugins.all
+      if plugins.empty?
+        puts "No plugins."
+        return
+      end
+
+      plugins.each do |plugin|
+        puts "##{plugin["id"]} #{plugin["name"]} command=#{plugin["command"]} enabled=#{plugin["enabled"]}"
+      end
+    end
+
     def api_json_response(status, data = {}, error = nil, meta = {})
       payload = { status: status }
       payload["error"] = error if error
@@ -2335,6 +2358,46 @@ module Helpdesk
         deliver_hook(hook, payload)
       else
         puts "Usage: hook add NAME EVENT COMMAND | hook remove ID | hook test ID [EVENT]"
+      end
+    rescue ArgumentError => e
+      puts e.message
+    end
+
+    def manage_plugins(args)
+      action = args[0]
+      case action
+      when "add"
+        return unless require_permission!(:admin)
+
+        name = args[1]
+        command = args.drop(2).join(" ")
+        if name.to_s.strip.empty? || command.to_s.strip.empty?
+          puts "Usage: plugin add NAME COMMAND"
+          return
+        end
+
+        plugin = @plugins.create(name: name, command: command)
+        log_action("plugin.create", "plugin ##{plugin["id"]}", name: plugin["name"])
+        puts "Created plugin ##{plugin["id"]}."
+      when "remove"
+        return unless require_permission!(:admin)
+
+        id = required_id(args.drop(1))
+        if @plugins.delete(id)
+          log_action("plugin.delete", "plugin ##{id}")
+          puts "Removed plugin ##{id}."
+        else
+          puts "Plugin not found."
+        end
+      when "run", "test"
+        name = args[1]
+        if name.to_s.strip.empty?
+          puts "Usage: plugin run NAME [ARGS...]"
+          return
+        end
+        run_plugin_by_name(name, args.drop(2))
+      else
+        puts "Usage: plugin add NAME COMMAND | plugin remove ID | plugin run NAME [ARGS...]"
       end
     rescue ArgumentError => e
       puts e.message
@@ -3295,7 +3358,50 @@ module Helpdesk
       dispatch_webhooks(action, actor, subject, details)
     end
 
+    def run_plugin_command(command, args)
+      plugin = @plugins.find_by_name(command)
+      return false if plugin.nil? || plugin["enabled"] == false
+
+      run_plugin(plugin, args)
+      true
+    end
+
+    def run_plugin_by_name(name, args)
+      plugin = @plugins.find_by_name(name)
+      return puts("Plugin not found.") unless plugin
+      return puts("Plugin is disabled.") if plugin["enabled"] == false
+
+      run_plugin(plugin, args)
+    end
+
+    def run_plugin(plugin, args)
+      command = @plugins.run(plugin["name"], args: args)
+      return puts("Plugin not found.") unless command
+
+      rendered = command[:command]
+      env = {
+        "HELPDESK_PLUGIN_ID" => plugin["id"].to_s,
+        "HELPDESK_PLUGIN_NAME" => plugin["name"].to_s,
+        "HELPDESK_PLUGIN_ARGS" => Array(args).join(" "),
+        "HELPDESK_PLUGIN_COMMAND" => rendered
+      }
+
+      puts "[plugin mock] Running plugin ##{plugin["id"]} #{plugin["name"]}: #{rendered}"
+      success = system(env, rendered)
+      if success
+        puts "[plugin mock] Completed."
+      else
+        status = $?.respond_to?(:exitstatus) ? $?.exitstatus : nil
+        puts "[plugin mock] Failed#{status ? " (exit #{status})" : ""}."
+      end
+
+      log_action("plugin.run", "plugin ##{plugin["id"]}", name: plugin["name"], args: Array(args), success: success)
+      success
+    end
+
     def dispatch_hooks(action, actor, subject, details)
+      return if @hooks.nil?
+
       @hooks.matching(action).each do |hook|
         payload = hook_payload(action, subject, details, actor: actor)
         deliver_hook(hook, payload)
@@ -3303,6 +3409,8 @@ module Helpdesk
     end
 
     def dispatch_webhooks(action, actor, subject, details)
+      return if @webhooks.nil?
+
       @webhooks.matching(action).each do |webhook|
         payload = webhook_payload(action, subject, details, actor: actor)
         deliver_webhook(webhook, payload)
@@ -3442,6 +3550,7 @@ module Helpdesk
         action.start_with?("notification.") ||
         action.start_with?("user.") ||
         action.start_with?("hook.") ||
+        action.start_with?("plugin.") ||
         action.start_with?("escalation.") ||
         action == "tickets.import"
     end
@@ -3480,6 +3589,12 @@ module Helpdesk
           "removed #{subject}"
         when "hook.trigger"
           "triggered #{subject}"
+        when "plugin.create"
+          "created #{subject}"
+        when "plugin.delete"
+          "removed #{subject}"
+        when "plugin.run"
+          "ran #{subject}"
         when "ticket.close"
           "closed #{subject}"
         when "ticket.status"
