@@ -114,6 +114,7 @@ module Helpdesk
         when "webhook" then manage_webhooks(args)
         when "webhooks" then list_webhooks
         when "aliases" then list_aliases
+        when "menu" then interactive_menu(args)
         when "exit", "quit" then break
         else
           if run_plugin_command(command, args)
@@ -248,6 +249,7 @@ module Helpdesk
           hook remove ID
           hook test ID [EVENT]
           aliases
+          menu
           plugins
           plugin add NAME COMMAND
           plugin remove ID
@@ -2438,6 +2440,41 @@ module Helpdesk
       return default if value.nil? || value.strip.empty?
 
       value.strip
+    end
+
+    def interactive_menu(_args = [])
+      loop do
+        puts
+        puts "Interactive Menu"
+        puts "1) Dashboard"
+        puts "2) List tickets"
+        puts "3) Show ticket"
+        puts "4) New ticket"
+        puts "5) Search tickets"
+        puts "6) Who am I"
+        puts "0) Exit menu"
+
+        choice = prompt("Choose an option", "0")
+        case choice
+        when "1"
+          dashboard
+        when "2"
+          list([])
+        when "3"
+          show([prompt("Ticket ID")])
+        when "4"
+          create_ticket([])
+        when "5"
+          search([prompt("Search query")])
+        when "6"
+          whoami
+        when "0", "q", "quit"
+          puts "Leaving menu."
+          break
+        else
+          puts "Unknown menu option."
+        end
+      end
     end
 
     def parse_options(args)
