@@ -4,7 +4,7 @@ This plan treats reduced complexity as the success metric. Each stage should lea
 
 - [x] Stage 1: Establish a safety net and explicit refactoring path.
   Add characterization tests for the core ticket model, ticket persistence, and external dispatch stores; document the full staged refactor so later changes are checked against stable behavior.
-- [ ] Stage 2: Centralize JSON file persistence.
+- [x] Stage 2: Centralize JSON file persistence.
   Replace repeated `load_data`, `save!`, directory creation, and `next_id` code with one deep persistence module that owns JSON parsing, default payloads, atomic writes, sorting, and ID allocation.
 - [ ] Stage 3: Move record normalization into owned value objects.
   Extract repeated hash normalization for append-only entries, attachments, webhooks, hooks, API tokens, plugins, templates, and users so public stores expose semantic operations rather than mutable storage hashes.
