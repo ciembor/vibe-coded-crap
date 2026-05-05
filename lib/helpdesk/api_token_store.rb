@@ -1,9 +1,17 @@
+require "json"
+require "fileutils"
 require "securerandom"
 require "time"
-require "helpdesk/json_file_store"
 
 module Helpdesk
-  class ApiTokenStore < JsonFileStore
+  class ApiTokenStore
+    attr_reader :path
+
+    def initialize(path: default_path)
+      @path = path
+      FileUtils.mkdir_p(File.dirname(path))
+      save!([]) unless File.exist?(path)
+    end
 
     def all
       load_data.sort_by { |row| row["id"].to_i }
@@ -102,10 +110,24 @@ module Helpdesk
       }
     end
 
-  private
+    private
 
     def default_path
       File.expand_path("../../data/api_tokens.json", __dir__)
+    end
+
+    def load_data
+      JSON.parse(File.read(path))
+    rescue Errno::ENOENT, JSON::ParserError
+      []
+    end
+
+    def save!(tokens)
+      File.write(path, JSON.pretty_generate(tokens))
+    end
+
+    def next_id(rows)
+      (rows.map { |row| row["id"].to_i }.max || 0) + 1
     end
 
     def normalize_scopes(scopes)

@@ -1,13 +1,17 @@
+require "json"
+require "fileutils"
 require "shellwords"
 require "time"
-require "helpdesk/json_file_store"
 
 module Helpdesk
-  class PluginStore < JsonFileStore
+  class PluginStore
+    attr_reader :path
 
     def initialize(path: default_path, config_path: default_config_path)
+      @path = path
       @config_path = config_path
-      super(path: path)
+      FileUtils.mkdir_p(File.dirname(path))
+      save!([]) unless File.exist?(path)
     end
 
     def all
@@ -76,6 +80,12 @@ module Helpdesk
       File.expand_path("../../data/plugins.config.json", __dir__)
     end
 
+    def load_data
+      JSON.parse(File.read(path))
+    rescue Errno::ENOENT, JSON::ParserError
+      []
+    end
+
     def config_data
       parsed = JSON.parse(File.read(config_path))
       rows = parsed.is_a?(Array) ? parsed : (parsed["plugins"] || parsed[:plugins] || [])
@@ -84,6 +94,14 @@ module Helpdesk
       end.compact
     rescue Errno::ENOENT, JSON::ParserError
       []
+    end
+
+    def save!(plugins)
+      File.write(path, JSON.pretty_generate(plugins))
+    end
+
+    def next_id(rows)
+      (rows.map { |row| row["id"].to_i }.max || 0) + 1
     end
 
     def normalize_plugin(row, fallback_id)

@@ -1,8 +1,16 @@
+require "json"
+require "fileutils"
 require "helpdesk/template"
-require "helpdesk/json_file_store"
 
 module Helpdesk
-  class TemplateStore < JsonFileStore
+  class TemplateStore
+    attr_reader :path
+
+    def initialize(path: default_path)
+      @path = path
+      FileUtils.mkdir_p(File.dirname(path))
+      save!([]) unless File.exist?(path)
+    end
 
     def all
       load_data.map { |row| Template.from_h(row) }
@@ -52,6 +60,16 @@ module Helpdesk
 
     def default_path
       File.expand_path("../../data/ticket_templates.json", __dir__)
+    end
+
+    def load_data
+      JSON.parse(File.read(path))
+    rescue Errno::ENOENT, JSON::ParserError
+      []
+    end
+
+    def save!(rows)
+      File.write(path, JSON.pretty_generate(rows))
     end
   end
 end
