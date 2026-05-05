@@ -1,16 +1,8 @@
-require "json"
-require "fileutils"
 require "helpdesk/ticket"
+require "helpdesk/json_file_store"
 
 module Helpdesk
-  class WorkflowStore
-    attr_reader :path
-
-    def initialize(path: default_path)
-      @path = path
-      FileUtils.mkdir_p(File.dirname(path))
-      save!(default_rows) unless File.exist?(path)
-    end
+  class WorkflowStore < JsonFileStore
 
     def all
       load_data.sort_by { |row| row["ticket_type"].to_s }
@@ -174,6 +166,10 @@ module Helpdesk
       default_workflows.values
     end
 
+    def default_payload
+      default_rows
+    end
+
     def default_permissions(transitions)
       transitions.each_with_object({}) do |(from_status, next_statuses), normalized|
         normalized[from_status] = Array(next_statuses).each_with_object({}) do |to_status, per_from|
@@ -256,14 +252,5 @@ module Helpdesk
       end
     end
 
-    def load_data
-      JSON.parse(File.read(path))
-    rescue Errno::ENOENT, JSON::ParserError
-      []
-    end
-
-    def save!(rows)
-      File.write(path, JSON.pretty_generate(rows))
-    end
   end
 end

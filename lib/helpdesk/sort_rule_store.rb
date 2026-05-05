@@ -1,9 +1,8 @@
-require "json"
-require "fileutils"
 require "helpdesk/ticket"
+require "helpdesk/json_file_store"
 
 module Helpdesk
-  class SortRuleStore
+  class SortRuleStore < JsonFileStore
     ALLOWED_FIELDS = %w[
       pinned
       archived
@@ -19,12 +18,6 @@ module Helpdesk
     ].freeze
 
     DEFAULT_RULE = %w[pinned archived overdue escalation sla priority due_at updated_at created_at title].freeze
-
-    def initialize(path: default_path)
-      @path = path
-      FileUtils.mkdir_p(File.dirname(path))
-      save!(default_rule) unless File.exist?(path)
-    end
 
     def current
       normalize_rule(load_data)
@@ -53,9 +46,7 @@ module Helpdesk
       DEFAULT_RULE.dup
     end
 
-    def load_data
-      JSON.parse(File.read(@path))
-    rescue Errno::ENOENT, JSON::ParserError
+    def default_payload
       default_rule
     end
 
@@ -74,7 +65,7 @@ module Helpdesk
     end
 
     def save!(fields)
-      File.write(@path, JSON.pretty_generate(fields))
+      super(fields)
     end
   end
 end
