@@ -1,0 +1,12 @@
+{
+  "commit": "1e6b5c1365ce55c0bdf11757b674bf1ba7a83af8",
+  "short_commit": "1e6b5c1",
+  "committed_at": "2026-05-04T19:58:37+02:00",
+  "subject": "Add CSV export",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

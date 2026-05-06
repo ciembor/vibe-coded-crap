@@ -1,0 +1,6 @@
+$ bundle exec rspec
+Could not locate Gemfile or .bundle/ directory
+$ bundle exec reek --list
+Could not locate Gemfile or .bundle/ directory
+$ bundle exec reek --format=json lib bin
+Could not locate Gemfile or .bundle/ directory

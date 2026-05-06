@@ -1,0 +1,12 @@
+{
+  "commit": "4e27bd4c93c2d671e88135615c39347c191a5ab6",
+  "short_commit": "4e27bd4",
+  "committed_at": "2026-05-04T20:02:02+02:00",
+  "subject": "Add user accounts",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

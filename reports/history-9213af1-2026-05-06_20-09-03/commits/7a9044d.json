@@ -1,0 +1,12 @@
+{
+  "commit": "7a9044d27244f5465af38c11157661860a68aa6d",
+  "short_commit": "7a9044d",
+  "committed_at": "2026-05-04T20:47:06+02:00",
+  "subject": "Add simple analytics commands",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

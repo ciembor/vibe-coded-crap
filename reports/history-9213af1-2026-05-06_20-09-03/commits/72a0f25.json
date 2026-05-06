@@ -1,0 +1,12 @@
+{
+  "commit": "72a0f259ec1f1445ec858d5873380b877fc26b45",
+  "short_commit": "72a0f25",
+  "committed_at": "2026-05-04T20:09:07+02:00",
+  "subject": "Add notification preferences",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

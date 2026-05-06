@@ -1,0 +1,12 @@
+{
+  "commit": "306c2cef2da218f768374817eeb91f8a7e39b617",
+  "short_commit": "306c2ce",
+  "committed_at": "2026-05-05T15:28:55+02:00",
+  "subject": "Add application configuration profiles",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

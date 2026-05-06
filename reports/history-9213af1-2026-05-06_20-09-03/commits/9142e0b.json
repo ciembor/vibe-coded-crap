@@ -1,0 +1,12 @@
+{
+  "commit": "9142e0b8cb68300b9d58b3635ff922e6c71fe94a",
+  "short_commit": "9142e0b",
+  "committed_at": "2026-05-05T15:23:41+02:00",
+  "subject": "Add keyboard shortcuts",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

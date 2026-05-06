@@ -1,0 +1,12 @@
+{
+  "commit": "3ad0fd131a83ad969a355e267b89847db82befff",
+  "short_commit": "3ad0fd1",
+  "committed_at": "2026-05-04T21:04:11+02:00",
+  "subject": "Add API-like command interface",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

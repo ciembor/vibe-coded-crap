@@ -1,0 +1,12 @@
+{
+  "commit": "9235a87b5e72ebc555a666e1a87adec3cb06b36b",
+  "short_commit": "9235a87",
+  "committed_at": "2026-05-04T20:45:51+02:00",
+  "subject": "Add escalation history",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

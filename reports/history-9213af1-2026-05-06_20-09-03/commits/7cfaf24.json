@@ -1,0 +1,12 @@
+{
+  "commit": "7cfaf24e75208e5c4a807300e997ea60b3758a89",
+  "short_commit": "7cfaf24",
+  "committed_at": "2026-05-04T20:36:22+02:00",
+  "subject": "Add undo for bulk actions",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

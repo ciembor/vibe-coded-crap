@@ -1,0 +1,12 @@
+{
+  "commit": "25e5062ea6ac4c36c43cd896559e4edd42b60a3b",
+  "short_commit": "25e5062",
+  "committed_at": "2026-05-04T21:03:16+02:00",
+  "subject": "Add webhook retry handling",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

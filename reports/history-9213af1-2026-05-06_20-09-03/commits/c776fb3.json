@@ -1,0 +1,12 @@
+{
+  "commit": "c776fb39e1e63e4d0aa8801b37f7a2e93b2ea804",
+  "short_commit": "c776fb3",
+  "committed_at": "2026-05-04T20:51:15+02:00",
+  "subject": "Add duplicate ticket detection",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

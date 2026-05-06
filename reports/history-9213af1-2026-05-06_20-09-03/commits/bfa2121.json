@@ -1,0 +1,12 @@
+{
+  "commit": "bfa2121270a8645e263d1bee8fb4746728ed7b91",
+  "short_commit": "bfa2121",
+  "committed_at": "2026-05-05T15:14:23+02:00",
+  "subject": "Add event hooks system",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

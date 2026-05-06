@@ -1,0 +1,12 @@
+{
+  "commit": "67cf3a50d619b764fa81ab5c90dc2dc418f5d8bf",
+  "short_commit": "67cf3a5",
+  "committed_at": "2026-05-04T19:57:24+02:00",
+  "subject": "Add recurring reminders",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

@@ -1,0 +1,12 @@
+{
+  "commit": "48df8f285ba9b8891eed19a9191be174f094637d",
+  "short_commit": "48df8f2",
+  "committed_at": "2026-05-04T20:00:04+02:00",
+  "subject": "Add bulk close action",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

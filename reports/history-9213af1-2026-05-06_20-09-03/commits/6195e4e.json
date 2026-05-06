@@ -1,0 +1,12 @@
+{
+  "commit": "6195e4ecc93bff59295c238e5fbf4f5faa3e4ad1",
+  "short_commit": "6195e4e",
+  "committed_at": "2026-05-04T20:43:10+02:00",
+  "subject": "Add ticket escalation rules",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

@@ -1,0 +1,12 @@
+{
+  "commit": "ea92c3a2a188f7c801efaca8c8f8cfc37364ff80",
+  "short_commit": "ea92c3a",
+  "committed_at": "2026-05-04T20:06:04+02:00",
+  "subject": "Add audit log filtering",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

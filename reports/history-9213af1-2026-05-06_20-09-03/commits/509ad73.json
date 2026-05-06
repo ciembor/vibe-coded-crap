@@ -1,0 +1,12 @@
+{
+  "commit": "509ad730a83860fd1e51a1d7e1b8e9b99ea3acdc",
+  "short_commit": "509ad73",
+  "committed_at": "2026-05-04T20:52:47+02:00",
+  "subject": "Add import conflict resolution",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

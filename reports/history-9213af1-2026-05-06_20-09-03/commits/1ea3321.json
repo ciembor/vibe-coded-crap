@@ -1,0 +1,12 @@
+{
+  "commit": "1ea3321bedc2b7884021adc5908c4666caf1c98b",
+  "short_commit": "1ea3321",
+  "committed_at": "2026-05-04T20:04:11+02:00",
+  "subject": "Restrict actions by role",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

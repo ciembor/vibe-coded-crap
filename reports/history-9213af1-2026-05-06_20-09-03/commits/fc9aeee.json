@@ -1,0 +1,12 @@
+{
+  "commit": "fc9aeeef88a0136495a7abac3bfb63bee400eb51",
+  "short_commit": "fc9aeee",
+  "committed_at": "2026-05-04T21:14:02+02:00",
+  "subject": "Add workflow transitions",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

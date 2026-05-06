@@ -1,0 +1,12 @@
+{
+  "commit": "9fe3d59e54ff7bab4060fee9d8b646e1c76a40c4",
+  "short_commit": "9fe3d59",
+  "committed_at": "2026-05-04T19:56:41+02:00",
+  "subject": "Add ticket reminders",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

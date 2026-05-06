@@ -1,0 +1,12 @@
+{
+  "commit": "855b483125c0f724936699ab6e552680c1373c94",
+  "short_commit": "855b483",
+  "committed_at": "2026-05-04T19:55:59+02:00",
+  "subject": "Add overdue ticket detection",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

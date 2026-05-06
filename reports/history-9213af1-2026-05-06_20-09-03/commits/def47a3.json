@@ -1,0 +1,12 @@
+{
+  "commit": "def47a3c167775044589e29e97f300aa40cd403d",
+  "short_commit": "def47a3",
+  "committed_at": "2026-05-04T21:22:24+02:00",
+  "subject": "Add restore support for deleted records",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

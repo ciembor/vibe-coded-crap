@@ -1,0 +1,12 @@
+{
+  "commit": "ba94586c5b643311eed9bc2e27dcd1e0efa89628",
+  "short_commit": "ba94586",
+  "committed_at": "2026-05-04T20:07:37+02:00",
+  "subject": "Add ticket watchers",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

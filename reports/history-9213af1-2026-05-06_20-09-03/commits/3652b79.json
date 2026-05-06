@@ -1,0 +1,12 @@
+{
+  "commit": "3652b7948135f844acdaf5fb7b3a14cbab795dde",
+  "short_commit": "3652b79",
+  "committed_at": "2026-05-04T20:06:42+02:00",
+  "subject": "Add internal notes",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

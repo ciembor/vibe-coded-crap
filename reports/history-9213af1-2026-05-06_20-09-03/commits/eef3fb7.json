@@ -1,0 +1,12 @@
+{
+  "commit": "eef3fb720959839c458690d55c0509cdb15cf1ef",
+  "short_commit": "eef3fb7",
+  "committed_at": "2026-05-04T20:35:00+02:00",
+  "subject": "Add ticket merge support",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

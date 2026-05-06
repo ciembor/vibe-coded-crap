@@ -1,0 +1,12 @@
+{
+  "commit": "b61dd8bbc31d590a882d59f6d3805834986060fd",
+  "short_commit": "b61dd8b",
+  "committed_at": "2026-05-04T19:57:59+02:00",
+  "subject": "Add dashboard statistics",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

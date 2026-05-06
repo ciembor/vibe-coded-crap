@@ -1,0 +1,12 @@
+{
+  "commit": "0cb7b8c35c43fca869fa9383f36e785a08685a1f",
+  "short_commit": "0cb7b8c",
+  "committed_at": "2026-05-04T20:05:29+02:00",
+  "subject": "Add audit log",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

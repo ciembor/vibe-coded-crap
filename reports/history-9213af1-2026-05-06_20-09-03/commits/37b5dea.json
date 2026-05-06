@@ -1,0 +1,12 @@
+{
+  "commit": "37b5dea4a3450e970a5ccc23409b5ebf6e6a4968",
+  "short_commit": "37b5dea",
+  "committed_at": "2026-05-04T20:23:54+02:00",
+  "subject": "Add archived ticket filtering",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

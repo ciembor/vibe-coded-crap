@@ -1,0 +1,899 @@
+
+
+{
+  "commit": "7a7f451693b7ab20a87b2849164bbddf197be8b6",
+  "short_commit": "7a7f451",
+  "committed_at": "2026-05-04T19:54:29+02:00",
+  "subject": "Build Ruby helpdesk CLI foundation",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "855b483125c0f724936699ab6e552680c1373c94",
+  "short_commit": "855b483",
+  "committed_at": "2026-05-04T19:55:59+02:00",
+  "subject": "Add overdue ticket detection",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "9fe3d59e54ff7bab4060fee9d8b646e1c76a40c4",
+  "short_commit": "9fe3d59",
+  "committed_at": "2026-05-04T19:56:41+02:00",
+  "subject": "Add ticket reminders",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "67cf3a50d619b764fa81ab5c90dc2dc418f5d8bf",
+  "short_commit": "67cf3a5",
+  "committed_at": "2026-05-04T19:57:24+02:00",
+  "subject": "Add recurring reminders",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "b61dd8bbc31d590a882d59f6d3805834986060fd",
+  "short_commit": "b61dd8b",
+  "committed_at": "2026-05-04T19:57:59+02:00",
+  "subject": "Add dashboard statistics",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "1e6b5c1365ce55c0bdf11757b674bf1ba7a83af8",
+  "short_commit": "1e6b5c1",
+  "committed_at": "2026-05-04T19:58:37+02:00",
+  "subject": "Add CSV export",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "31894f9579f820c1b78d932b6a5098758e86fd4e",
+  "short_commit": "31894f9",
+  "committed_at": "2026-05-04T19:59:05+02:00",
+  "subject": "Add JSON export",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "6272738c498724f457b5845af0bf95af10902a9e",
+  "short_commit": "6272738",
+  "committed_at": "2026-05-04T19:59:36+02:00",
+  "subject": "Add JSON import",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "48df8f285ba9b8891eed19a9191be174f094637d",
+  "short_commit": "48df8f2",
+  "committed_at": "2026-05-04T20:00:04+02:00",
+  "subject": "Add bulk close action",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "6485a99657afb7d04773e48b22f641e8b35c5d72",
+  "short_commit": "6485a99",
+  "committed_at": "2026-05-04T20:00:38+02:00",
+  "subject": "Add bulk tagging",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "4e27bd4c93c2d671e88135615c39347c191a5ab6",
+  "short_commit": "4e27bd4",
+  "committed_at": "2026-05-04T20:02:02+02:00",
+  "subject": "Add user accounts",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "4c8ab38aa4329a4aee8eb313a5ab43bcd50d025b",
+  "short_commit": "4c8ab38",
+  "committed_at": "2026-05-04T20:03:02+02:00",
+  "subject": "Add user roles",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "1ea3321bedc2b7884021adc5908c4666caf1c98b",
+  "short_commit": "1ea3321",
+  "committed_at": "2026-05-04T20:04:11+02:00",
+  "subject": "Restrict actions by role",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "0cb7b8c35c43fca869fa9383f36e785a08685a1f",
+  "short_commit": "0cb7b8c",
+  "committed_at": "2026-05-04T20:05:29+02:00",
+  "subject": "Add audit log",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "ea92c3a2a188f7c801efaca8c8f8cfc37364ff80",
+  "short_commit": "ea92c3a",
+  "committed_at": "2026-05-04T20:06:04+02:00",
+  "subject": "Add audit log filtering",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "3652b7948135f844acdaf5fb7b3a14cbab795dde",
+  "short_commit": "3652b79",
+  "committed_at": "2026-05-04T20:06:42+02:00",
+  "subject": "Add internal notes",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "ba94586c5b643311eed9bc2e27dcd1e0efa89628",
+  "short_commit": "ba94586",
+  "committed_at": "2026-05-04T20:07:37+02:00",
+  "subject": "Add ticket watchers",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "72a0f259ec1f1445ec858d5873380b877fc26b45",
+  "short_commit": "72a0f25",
+  "committed_at": "2026-05-04T20:09:07+02:00",
+  "subject": "Add notification preferences",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "cfd09252bcbaa92467fb440e51a7a76db2ac5831",
+  "short_commit": "cfd0925",
+  "committed_at": "2026-05-04T20:14:34+02:00",
+  "subject": "Add email notification mock",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "ba0f4e81e59b11eceae3fae028d3e0677b22d2af",
+  "short_commit": "ba0f4e8",
+  "committed_at": "2026-05-04T20:18:07+02:00",
+  "subject": "Add notification suppression rules",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "a179217156d69bef63ed172497a0948e4a8052b5",
+  "short_commit": "a179217",
+  "committed_at": "2026-05-04T20:20:01+02:00",
+  "subject": "Add ticket attachments metadata",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "2f9f153a644f99d2d9986980e225d8eabda3cab2",
+  "short_commit": "2f9f153",
+  "committed_at": "2026-05-04T20:21:03+02:00",
+  "subject": "Add activity feed",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "bc5bc8cca3ec3a55fed239246de72788bc2f945f",
+  "short_commit": "bc5bc8c",
+  "committed_at": "2026-05-04T20:22:15+02:00",
+  "subject": "Add pinned tickets",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "21cca112d6cfec40c3f297a91e3e356151583727",
+  "short_commit": "21cca11",
+  "committed_at": "2026-05-04T20:23:13+02:00",
+  "subject": "Add archived tickets",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "37b5dea4a3450e970a5ccc23409b5ebf6e6a4968",
+  "short_commit": "37b5dea",
+  "committed_at": "2026-05-04T20:23:54+02:00",
+  "subject": "Add archived ticket filtering",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "17b94849fda3023cd2ea66b6c12e5c363cfb3e7d",
+  "short_commit": "17b9484",
+  "committed_at": "2026-05-04T20:25:06+02:00",
+  "subject": "Add saved searches",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "9ee3e69e0261ce16a8283d04d22647cfe9c19e6f",
+  "short_commit": "9ee3e69",
+  "committed_at": "2026-05-04T20:26:22+02:00",
+  "subject": "Add favorite filters",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "acc8584528f29b9000d4c6654ef4abb29e730fb7",
+  "short_commit": "acc8584",
+  "committed_at": "2026-05-04T20:28:25+02:00",
+  "subject": "Add custom ticket fields",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "60c0b662080399f9d13d99f23851e447e499856a",
+  "short_commit": "60c0b66",
+  "committed_at": "2026-05-04T20:30:27+02:00",
+  "subject": "Add validation rules per ticket type",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "93b97ad615110f30916826c26b7d36594d07cfe4",
+  "short_commit": "93b97ad",
+  "committed_at": "2026-05-04T20:32:20+02:00",
+  "subject": "Add ticket templates",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "f29e6951ab22e1304f67fafd6c1a50186d2ff8fc",
+  "short_commit": "f29e695",
+  "committed_at": "2026-05-04T20:33:25+02:00",
+  "subject": "Add role-based field visibility",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "eef3fb720959839c458690d55c0509cdb15cf1ef",
+  "short_commit": "eef3fb7",
+  "committed_at": "2026-05-04T20:35:00+02:00",
+  "subject": "Add ticket merge support",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "7cfaf24e75208e5c4a807300e997ea60b3758a89",
+  "short_commit": "7cfaf24",
+  "committed_at": "2026-05-04T20:36:22+02:00",
+  "subject": "Add undo for bulk actions",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "5159cb73cfea8dd20a5097f048154197178e4721",
+  "short_commit": "5159cb7",
+  "committed_at": "2026-05-04T20:38:31+02:00",
+  "subject": "Add SLA breach warnings",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "d09b7d0e472507b7a794a58d5a0774ff1518d78d",
+  "short_commit": "d09b7d0",
+  "committed_at": "2026-05-04T20:41:00+02:00",
+  "subject": "Add configurable SLA rules",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "6195e4ecc93bff59295c238e5fbf4f5faa3e4ad1",
+  "short_commit": "6195e4e",
+  "committed_at": "2026-05-04T20:43:10+02:00",
+  "subject": "Add ticket escalation rules",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "9235a87b5e72ebc555a666e1a87adec3cb06b36b",
+  "short_commit": "9235a87",
+  "committed_at": "2026-05-04T20:45:51+02:00",
+  "subject": "Add escalation history",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "7a9044d27244f5465af38c11157661860a68aa6d",
+  "short_commit": "7a9044d",
+  "committed_at": "2026-05-04T20:47:06+02:00",
+  "subject": "Add simple analytics commands",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "be1813e72ccbc6503a3ea760ca14c5ca59576fff",
+  "short_commit": "be1813e",
+  "committed_at": "2026-05-04T20:47:53+02:00",
+  "subject": "Add daily summary reports",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "6a0e2d7cdc0a4b35cfa90b370cee4340f7249daa",
+  "short_commit": "6a0e2d7",
+  "committed_at": "2026-05-04T20:48:35+02:00",
+  "subject": "Add weekly summary reports",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "d1b8f5c366b38705de27d1e7a7e97f3c9c3496a0",
+  "short_commit": "d1b8f5c",
+  "committed_at": "2026-05-04T20:49:53+02:00",
+  "subject": "Add custom sorting rules",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "c776fb39e1e63e4d0aa8801b37f7a2e93b2ea804",
+  "short_commit": "c776fb3",
+  "committed_at": "2026-05-04T20:51:15+02:00",
+  "subject": "Add duplicate ticket detection",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "509ad730a83860fd1e51a1d7e1b8e9b99ea3acdc",
+  "short_commit": "509ad73",
+  "committed_at": "2026-05-04T20:52:47+02:00",
+  "subject": "Add import conflict resolution",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "359cc5243f6590fd461655b8d839c64fca8abb3a",
+  "short_commit": "359cc52",
+  "committed_at": "2026-05-04T20:54:44+02:00",
+  "subject": "Add ticket relationships",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "db963349af8cc7cbae08d8bd5e101814ca8897b9",
+  "short_commit": "db96334",
+  "committed_at": "2026-05-04T20:58:21+02:00",
+  "subject": "Add parent-child tickets",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "eeb6581743640d5f630f6988ecd9ab1b83be3f43",
+  "short_commit": "eeb6581",
+  "committed_at": "2026-05-04T20:59:15+02:00",
+  "subject": "Add dependency tracking",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "bc0abe55d20fa5abd6b0fcbd2a94376b06d538db",
+  "short_commit": "bc0abe5",
+  "committed_at": "2026-05-04T21:00:22+02:00",
+  "subject": "Block closing tickets with open dependencies",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "5921389009159cb5ebea28fb92989358fdee5b74",
+  "short_commit": "5921389",
+  "committed_at": "2026-05-04T21:02:27+02:00",
+  "subject": "Add webhook simulation",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "25e5062ea6ac4c36c43cd896559e4edd42b60a3b",
+  "short_commit": "25e5062",
+  "committed_at": "2026-05-04T21:03:16+02:00",
+  "subject": "Add webhook retry handling",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "3ad0fd131a83ad969a355e267b89847db82befff",
+  "short_commit": "3ad0fd1",
+  "committed_at": "2026-05-04T21:04:11+02:00",
+  "subject": "Add API-like command interface",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "40273154cc6f8f09ced4cc05d191dbfe0e878be0",
+  "short_commit": "4027315",
+  "committed_at": "2026-05-04T21:05:31+02:00",
+  "subject": "Add API authentication tokens",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "ea4b3d12f231573634ed3406c2f7cccbf7a8893a",
+  "short_commit": "ea4b3d1",
+  "committed_at": "2026-05-04T21:06:31+02:00",
+  "subject": "Add API rate limiting",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "c9551497ef5bbdfaff10d4dc02d853d942083bfc",
+  "short_commit": "c955149",
+  "committed_at": "2026-05-04T21:07:59+02:00",
+  "subject": "Add simple caching layer",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "99b50335c51cb421657c3a85c9165e7df29e12ce",
+  "short_commit": "99b5033",
+  "committed_at": "2026-05-04T21:08:37+02:00",
+  "subject": "Add cache invalidation rules",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "d1e053846249c1d5b36c61501f0d03416d60a987",
+  "short_commit": "d1e0538",
+  "committed_at": "2026-05-04T21:12:27+02:00",
+  "subject": "Add configurable workflows",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "fc9aeeef88a0136495a7abac3bfb63bee400eb51",
+  "short_commit": "fc9aeee",
+  "committed_at": "2026-05-04T21:14:02+02:00",
+  "subject": "Add workflow transitions",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "f66e4705e11eddc3d6b7fd738936aa591151ad2c",
+  "short_commit": "f66e470",
+  "committed_at": "2026-05-04T21:17:07+02:00",
+  "subject": "Add transition permissions",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "7dcb47aba49789caaff03742dd73fad24ba57568",
+  "short_commit": "7dcb47a",
+  "committed_at": "2026-05-04T21:20:05+02:00",
+  "subject": "Add soft-delete support",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "def47a3c167775044589e29e97f300aa40cd403d",
+  "short_commit": "def47a3",
+  "committed_at": "2026-05-04T21:22:24+02:00",
+  "subject": "Add restore support for deleted records",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "bfa2121270a8645e263d1bee8fb4746728ed7b91",
+  "short_commit": "bfa2121",
+  "committed_at": "2026-05-05T15:14:23+02:00",
+  "subject": "Add event hooks system",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "0f4bc66d9b0e7c6b451a73517cee4a1843c78eb8",
+  "short_commit": "0f4bc66",
+  "committed_at": "2026-05-05T15:17:57+02:00",
+  "subject": "Add plugin system for custom commands",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "c8dd890d355cad3220fa6dcb3e7e454ee90eaa82",
+  "short_commit": "c8dd890",
+  "committed_at": "2026-05-05T15:19:24+02:00",
+  "subject": "Add plugin loading from config",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "460f38c020f02302a9cb83ff2db287849a88cdfb",
+  "short_commit": "460f38c",
+  "committed_at": "2026-05-05T15:20:26+02:00",
+  "subject": "Add command aliases",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "961dced9b2fb9d7af129422b7d56ab3d81fbca3d",
+  "short_commit": "961dced",
+  "committed_at": "2026-05-05T15:22:44+02:00",
+  "subject": "Add interactive terminal menu",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "9142e0b8cb68300b9d58b3635ff922e6c71fe94a",
+  "short_commit": "9142e0b",
+  "committed_at": "2026-05-05T15:23:41+02:00",
+  "subject": "Add keyboard shortcuts",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "9b598dcb3790c286d0c30f239bb7453ae26517c1",
+  "short_commit": "9b598dc",
+  "committed_at": "2026-05-05T15:25:16+02:00",
+  "subject": "Add session persistence",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "306c2cef2da218f768374817eeb91f8a7e39b617",
+  "short_commit": "306c2ce",
+  "committed_at": "2026-05-05T15:28:55+02:00",
+  "subject": "Add application configuration profiles",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "e1a2a8e1b1a6e9c01ada1147823853f5fa0c71e2",
+  "short_commit": "e1a2a8e",
+  "committed_at": "2026-05-05T15:29:32+02:00",
+  "subject": "Add environment-specific configuration",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+
+{
+  "commit": "9213af17baec9f5235f4649b86aa7613a721b88e",
+  "short_commit": "9213af1",
+  "committed_at": "2026-05-05T15:30:37+02:00",
+  "subject": "Add debug logging mode",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
+

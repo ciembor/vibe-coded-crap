@@ -1,0 +1,12 @@
+{
+  "commit": "17b94849fda3023cd2ea66b6c12e5c363cfb3e7d",
+  "short_commit": "17b9484",
+  "committed_at": "2026-05-04T20:25:06+02:00",
+  "subject": "Add saved searches",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

@@ -1,0 +1,12 @@
+{
+  "commit": "6272738c498724f457b5845af0bf95af10902a9e",
+  "short_commit": "6272738",
+  "committed_at": "2026-05-04T19:59:36+02:00",
+  "subject": "Add JSON import",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

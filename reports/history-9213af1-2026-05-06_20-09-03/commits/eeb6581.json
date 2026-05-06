@@ -1,0 +1,12 @@
+{
+  "commit": "eeb6581743640d5f630f6988ecd9ab1b83be3f43",
+  "short_commit": "eeb6581",
+  "committed_at": "2026-05-04T20:59:15+02:00",
+  "subject": "Add dependency tracking",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

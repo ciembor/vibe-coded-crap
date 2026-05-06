@@ -1,0 +1,12 @@
+{
+  "commit": "460f38c020f02302a9cb83ff2db287849a88cdfb",
+  "short_commit": "460f38c",
+  "committed_at": "2026-05-05T15:20:26+02:00",
+  "subject": "Add command aliases",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

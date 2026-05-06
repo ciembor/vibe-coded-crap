@@ -1,0 +1,12 @@
+{
+  "commit": "e1a2a8e1b1a6e9c01ada1147823853f5fa0c71e2",
+  "short_commit": "e1a2a8e",
+  "committed_at": "2026-05-05T15:29:32+02:00",
+  "subject": "Add environment-specific configuration",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

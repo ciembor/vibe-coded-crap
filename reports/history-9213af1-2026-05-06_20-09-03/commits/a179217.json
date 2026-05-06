@@ -1,0 +1,12 @@
+{
+  "commit": "a179217156d69bef63ed172497a0948e4a8052b5",
+  "short_commit": "a179217",
+  "committed_at": "2026-05-04T20:20:01+02:00",
+  "subject": "Add ticket attachments metadata",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

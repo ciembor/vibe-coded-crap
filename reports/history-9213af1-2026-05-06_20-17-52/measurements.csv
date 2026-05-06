@@ -1,0 +1,1 @@
+commit_number,commit,short_commit,committed_at,coverage_percent,smells_total,rspec_exit_status,reek_exit_status,subject

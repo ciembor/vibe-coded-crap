@@ -1,0 +1,12 @@
+{
+  "commit": "d1b8f5c366b38705de27d1e7a7e97f3c9c3496a0",
+  "short_commit": "d1b8f5c",
+  "committed_at": "2026-05-04T20:49:53+02:00",
+  "subject": "Add custom sorting rules",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

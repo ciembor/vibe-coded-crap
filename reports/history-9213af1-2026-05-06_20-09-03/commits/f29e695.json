@@ -1,0 +1,12 @@
+{
+  "commit": "f29e6951ab22e1304f67fafd6c1a50186d2ff8fc",
+  "short_commit": "f29e695",
+  "committed_at": "2026-05-04T20:33:25+02:00",
+  "subject": "Add role-based field visibility",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

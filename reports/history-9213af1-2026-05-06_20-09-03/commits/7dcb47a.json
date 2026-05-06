@@ -1,0 +1,12 @@
+{
+  "commit": "7dcb47aba49789caaff03742dd73fad24ba57568",
+  "short_commit": "7dcb47a",
+  "committed_at": "2026-05-04T21:20:05+02:00",
+  "subject": "Add soft-delete support",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

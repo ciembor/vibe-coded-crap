@@ -1,0 +1,12 @@
+{
+  "commit": "be1813e72ccbc6503a3ea760ca14c5ca59576fff",
+  "short_commit": "be1813e",
+  "committed_at": "2026-05-04T20:47:53+02:00",
+  "subject": "Add daily summary reports",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

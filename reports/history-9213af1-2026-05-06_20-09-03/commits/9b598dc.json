@@ -1,0 +1,12 @@
+{
+  "commit": "9b598dcb3790c286d0c30f239bb7453ae26517c1",
+  "short_commit": "9b598dc",
+  "committed_at": "2026-05-05T15:25:16+02:00",
+  "subject": "Add session persistence",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

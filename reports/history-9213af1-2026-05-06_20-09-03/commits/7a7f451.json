@@ -1,0 +1,12 @@
+{
+  "commit": "7a7f451693b7ab20a87b2849164bbddf197be8b6",
+  "short_commit": "7a7f451",
+  "committed_at": "2026-05-04T19:54:29+02:00",
+  "subject": "Build Ruby helpdesk CLI foundation",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

@@ -1,0 +1,12 @@
+{
+  "commit": "9ee3e69e0261ce16a8283d04d22647cfe9c19e6f",
+  "short_commit": "9ee3e69",
+  "committed_at": "2026-05-04T20:26:22+02:00",
+  "subject": "Add favorite filters",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

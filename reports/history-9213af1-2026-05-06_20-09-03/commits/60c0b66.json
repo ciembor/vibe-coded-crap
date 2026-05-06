@@ -1,0 +1,12 @@
+{
+  "commit": "60c0b662080399f9d13d99f23851e447e499856a",
+  "short_commit": "60c0b66",
+  "committed_at": "2026-05-04T20:30:27+02:00",
+  "subject": "Add validation rules per ticket type",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

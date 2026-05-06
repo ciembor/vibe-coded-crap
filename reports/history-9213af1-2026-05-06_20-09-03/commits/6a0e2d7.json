@@ -1,0 +1,12 @@
+{
+  "commit": "6a0e2d7cdc0a4b35cfa90b370cee4340f7249daa",
+  "short_commit": "6a0e2d7",
+  "committed_at": "2026-05-04T20:48:35+02:00",
+  "subject": "Add weekly summary reports",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

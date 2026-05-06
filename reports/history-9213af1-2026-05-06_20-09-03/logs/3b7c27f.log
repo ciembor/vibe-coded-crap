@@ -1,0 +1,4 @@
+Pomijam nieistniejącą ścieżkę: lib
+Pomijam nieistniejącą ścieżkę: bin
+Nie znaleziono katalogów do analizy. Podaj np.:
+quality_report.sh lib bin

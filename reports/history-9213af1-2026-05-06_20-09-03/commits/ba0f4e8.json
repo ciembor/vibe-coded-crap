@@ -1,0 +1,12 @@
+{
+  "commit": "ba0f4e81e59b11eceae3fae028d3e0677b22d2af",
+  "short_commit": "ba0f4e8",
+  "committed_at": "2026-05-04T20:18:07+02:00",
+  "subject": "Add notification suppression rules",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

@@ -1,0 +1,12 @@
+{
+  "commit": "4c8ab38aa4329a4aee8eb313a5ab43bcd50d025b",
+  "short_commit": "4c8ab38",
+  "committed_at": "2026-05-04T20:03:02+02:00",
+  "subject": "Add user roles",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

@@ -1,0 +1,12 @@
+{
+  "commit": "5159cb73cfea8dd20a5097f048154197178e4721",
+  "short_commit": "5159cb7",
+  "committed_at": "2026-05-04T20:38:31+02:00",
+  "subject": "Add SLA breach warnings",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

@@ -1,0 +1,12 @@
+{
+  "commit": "acc8584528f29b9000d4c6654ef4abb29e730fb7",
+  "short_commit": "acc8584",
+  "committed_at": "2026-05-04T20:28:25+02:00",
+  "subject": "Add custom ticket fields",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

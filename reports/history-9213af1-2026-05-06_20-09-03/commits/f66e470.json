@@ -1,0 +1,12 @@
+{
+  "commit": "f66e4705e11eddc3d6b7fd738936aa591151ad2c",
+  "short_commit": "f66e470",
+  "committed_at": "2026-05-04T21:17:07+02:00",
+  "subject": "Add transition permissions",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

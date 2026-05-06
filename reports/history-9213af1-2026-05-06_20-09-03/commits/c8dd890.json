@@ -1,0 +1,12 @@
+{
+  "commit": "c8dd890d355cad3220fa6dcb3e7e454ee90eaa82",
+  "short_commit": "c8dd890",
+  "committed_at": "2026-05-05T15:19:24+02:00",
+  "subject": "Add plugin loading from config",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

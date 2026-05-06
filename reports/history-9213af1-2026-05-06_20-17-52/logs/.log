@@ -1,0 +1,4 @@
+Pomijam nieistniejącą ścieżkę w : lib bin
+Brak katalogu spec w  — pomijam testy.
+Brak ścieżek do analizy Reekiem.
+Reek nie zwrócił poprawnego JSON-a. Zapisuję pustą listę smelli.

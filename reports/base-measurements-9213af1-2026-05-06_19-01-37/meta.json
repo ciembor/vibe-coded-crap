@@ -1,0 +1,7 @@
+{
+  "branch": "base-measurements",
+  "commit": "9213af1",
+  "timestamp": "2026-05-06_19-01-37",
+  "targets": "app lib",
+  "rspec_command": "bundle exec rspec --require spec_helper"
+}

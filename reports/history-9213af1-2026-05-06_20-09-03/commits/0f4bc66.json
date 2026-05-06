@@ -1,0 +1,12 @@
+{
+  "commit": "0f4bc66d9b0e7c6b451a73517cee4a1843c78eb8",
+  "short_commit": "0f4bc66",
+  "committed_at": "2026-05-05T15:17:57+02:00",
+  "subject": "Add plugin system for custom commands",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

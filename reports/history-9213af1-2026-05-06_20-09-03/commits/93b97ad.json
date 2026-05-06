@@ -1,0 +1,12 @@
+{
+  "commit": "93b97ad615110f30916826c26b7d36594d07cfe4",
+  "short_commit": "93b97ad",
+  "committed_at": "2026-05-04T20:32:20+02:00",
+  "subject": "Add ticket templates",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

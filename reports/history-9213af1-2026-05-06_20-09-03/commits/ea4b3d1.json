@@ -1,0 +1,12 @@
+{
+  "commit": "ea4b3d12f231573634ed3406c2f7cccbf7a8893a",
+  "short_commit": "ea4b3d1",
+  "committed_at": "2026-05-04T21:06:31+02:00",
+  "subject": "Add API rate limiting",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}

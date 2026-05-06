@@ -1,0 +1,12 @@
+{
+  "commit": "bc0abe55d20fa5abd6b0fcbd2a94376b06d538db",
+  "short_commit": "bc0abe5",
+  "committed_at": "2026-05-04T21:00:22+02:00",
+  "subject": "Block closing tickets with open dependencies",
+  "exit_status": 10,
+  "coverage_percent": null,
+  "smells_total": null,
+  "smells_by_type": {},
+  "error": "measurement_failed",
+  "stderr": "$ bundle exec rspec\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --list\nCould not locate Gemfile or .bundle/ directory\n$ bundle exec reek --format=json lib bin\nCould not locate Gemfile or .bundle/ directory"
+}
