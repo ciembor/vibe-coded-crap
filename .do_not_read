@@ -1,6 +1,15 @@
-GPT 5.4-Mini
-Reasoning: Medium
+GPT 5.5
+Reasoning: Extra High
 
-First prompt: Build a plain Ruby terminal app from BACKLOG.md, use JSON or YAML for persistence, prioritize shipping working features over refactoring, and commit after each completed task.
+First prompt: 
 
-Next prompts: Implement the next unfinished task from BACKLOG.md and commit it.
+Create PLAN.md and put there a complete refactoring plan for the application, continuing until the entire codebase is in an ideal state.
+
+The plan should be split into sequential stages with checkboxes. Mark each checkbox as completed when that stage is done.
+
+Refactor the code step by step, and create a commit every time you complete and check off a stage.
+
+GPT 5.5
+Reasoning: High
+
+Next prompts: Execute the next step of refactoring.

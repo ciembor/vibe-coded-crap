@@ -1,7 +1,6 @@
 require "json"
-require "shellwords"
-require "time"
 require "helpdesk/json_file"
+require "helpdesk/plugin_definition"
 
 module Helpdesk
   class PluginStore
@@ -13,7 +12,7 @@ module Helpdesk
     end
 
     def all
-      (load_data + config_data).uniq { |row| row["name"].to_s }.sort_by { |row| row["id"].to_i }
+      (stored_plugins + config_data).uniq { |row| row["name"].to_s }.sort_by { |row| row["id"].to_i }
     end
 
     def find(id)
@@ -27,20 +26,10 @@ module Helpdesk
     def create(attrs)
       plugins = load_data
       name = attrs.fetch(:name).to_s.strip
-      command = attrs.fetch(:command).to_s.strip
       raise ArgumentError, "plugin name cannot be empty" if name.empty?
-      raise ArgumentError, "plugin command cannot be empty" if command.empty?
       raise ArgumentError, "plugin name already exists" if all.any? { |row| row["name"].to_s == name }
 
-      plugin = {
-        "id" => next_id(plugins),
-        "name" => name,
-        "command" => command,
-        "enabled" => attrs.fetch(:enabled, true),
-        "created_at" => Time.now.utc.iso8601,
-        "updated_at" => Time.now.utc.iso8601
-      }
-
+      plugin = PluginDefinition.create(id: next_id(plugins), attrs: attrs)
       plugins << plugin
       save!(plugins)
       plugin
@@ -56,15 +45,20 @@ module Helpdesk
     def run(name, args: [])
       plugin = find_by_name(name)
       return nil unless plugin
-      return nil if plugin["enabled"] == false
+      definition = PluginDefinition.from_h(plugin)
+      return nil unless definition.enabled?
 
       {
         plugin: plugin,
-        command: render_command(plugin["command"], args)
+        command: definition.render_command(args)
       }
     end
 
     private
+
+    def stored_plugins
+      load_data.map { |row| PluginDefinition.from_h(row).to_h }
+    end
 
     def default_path
       File.expand_path("../../data/plugins.json", __dir__)
@@ -82,36 +76,10 @@ module Helpdesk
       parsed = JSON.parse(File.read(config_path))
       rows = parsed.is_a?(Array) ? parsed : (parsed["plugins"] || parsed[:plugins] || [])
       Array(rows).map.with_index(1) do |row, idx|
-        normalize_plugin(row, idx)
+        PluginDefinition.from_config(row, fallback_id: idx)
       end.compact
     rescue Errno::ENOENT, JSON::ParserError
       []
-    end
-
-    def normalize_plugin(row, fallback_id)
-      row = row.is_a?(Hash) ? row : {}
-      name = row["name"] || row[:name]
-      command = row["command"] || row[:command]
-      enabled = row.key?("enabled") ? row["enabled"] : row[:enabled]
-      return nil if name.to_s.strip.empty? || command.to_s.strip.empty?
-
-      {
-        "id" => (row["id"] || row[:id] || fallback_id).to_i,
-        "name" => name.to_s.strip,
-        "command" => command.to_s.strip,
-        "enabled" => enabled.nil? ? true : enabled,
-        "created_at" => row["created_at"] || row[:created_at] || Time.now.utc.iso8601,
-        "updated_at" => row["updated_at"] || row[:updated_at] || Time.now.utc.iso8601
-      }
-    end
-
-    def render_command(template, args)
-      rendered = template.to_s.dup
-      rendered.gsub!("{{args}}", Shellwords.join(args.map(&:to_s)))
-      Array(args).each_with_index do |arg, idx|
-        rendered.gsub!("{{#{idx + 1}}}", Shellwords.escape(arg.to_s))
-      end
-      rendered
     end
   end
 end

@@ -1,5 +1,5 @@
-require "time"
 require "helpdesk/json_file"
+require "helpdesk/log_entry"
 
 module Helpdesk
   class AuditLog
@@ -11,14 +11,7 @@ module Helpdesk
 
     def append(action:, actor:, subject:, details: {})
       entries = load_data
-      entries << {
-        "id" => next_id(entries),
-        "action" => action,
-        "actor" => actor,
-        "subject" => subject,
-        "details" => details,
-        "created_at" => Time.now.utc.iso8601
-      }
+      entries << LogEntry.audit(id: next_id(entries), action: action, actor: actor, subject: subject, details: details)
       save!(entries)
     end
 

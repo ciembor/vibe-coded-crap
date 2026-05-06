@@ -1,4 +1,4 @@
-require "time"
+require "helpdesk/hook_definition"
 require "helpdesk/json_file"
 
 module Helpdesk
@@ -10,7 +10,7 @@ module Helpdesk
     end
 
     def all
-      load_data.sort_by { |row| row["id"].to_i }
+      load_data.map { |row| HookDefinition.from_h(row).to_h }.sort_by { |row| row["id"].to_i }
     end
 
     def find(id)
@@ -19,18 +19,7 @@ module Helpdesk
 
     def create(attrs)
       hooks = load_data
-      hook = {
-        "id" => next_id(hooks),
-        "name" => attrs.fetch(:name).to_s.strip,
-        "events" => normalize_events(attrs.fetch(:events, [])),
-        "command" => attrs.fetch(:command).to_s.strip,
-        "enabled" => attrs.fetch(:enabled, true),
-        "created_at" => Time.now.utc.iso8601,
-        "updated_at" => Time.now.utc.iso8601
-      }
-      raise ArgumentError, "hook name cannot be empty" if hook["name"].empty?
-      raise ArgumentError, "hook command cannot be empty" if hook["command"].empty?
-
+      hook = HookDefinition.create(id: next_id(hooks), attrs: attrs)
       hooks << hook
       save!(hooks)
       hook
@@ -44,9 +33,8 @@ module Helpdesk
     end
 
     def matching(event)
-      normalized_event = event.to_s.strip
       all.select do |hook|
-        hook["enabled"] != false && subscribed_to_event?(hook, normalized_event)
+        HookDefinition.from_h(hook).matches?(event)
       end
     end
 
@@ -54,21 +42,6 @@ module Helpdesk
 
     def default_path
       File.expand_path("../../data/hooks.json", __dir__)
-    end
-
-    def normalize_events(events)
-      Array(events).flat_map { |event| event.to_s.split(",") }.map { |event| event.strip }.reject(&:empty?).uniq.sort
-    end
-
-    def subscribed_to_event?(hook, event)
-      events = Array(hook["events"]).map(&:to_s)
-      return true if events.empty?
-      return true if events.include?("*")
-      return true if events.include?(event)
-
-      events.any? do |subscribed|
-        subscribed.end_with?("*") && event.start_with?(subscribed.delete_suffix("*"))
-      end
     end
   end
 end

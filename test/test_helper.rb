@@ -29,6 +29,28 @@ module HelpdeskTestSupport
   ensure
     $stdout = original_stdout
   end
+
+  def build_cli(dir, role: "agent")
+    store = Helpdesk::Store.new(path: File.join(dir, "tickets.json"))
+    profiles = Helpdesk::ProfileStore.new(path: File.join(dir, "profiles.json"))
+    context = Helpdesk::ApplicationContext.new(store: store, profiles: profiles)
+    current_user = context.users.update(
+      context.current_user.id,
+      name: "Current",
+      email: "current@example.test",
+      role: role
+    )
+    context.current_user = current_user
+
+    cli = Helpdesk::CLI.allocate
+    cli.instance_variable_set(:@context, context)
+    cli.send(:apply_context!)
+    cli.instance_variable_set(:@api_rate_limit, Helpdesk::CLI::API_RATE_LIMIT)
+    cli.instance_variable_set(:@api_rate_window_seconds, Helpdesk::CLI::API_RATE_WINDOW_SECONDS)
+    cli.instance_variable_set(:@api_response_cache, {})
+    cli.instance_variable_set(:@debug_enabled, false)
+    cli
+  end
 end
 
 class Minitest::Test

@@ -1,257 +1,88 @@
-require "date"
 require "time"
+require "helpdesk/ticket_policy"
+require "helpdesk/ticket_attachment"
+require "helpdesk/ticket_entry"
 
 module Helpdesk
   class Ticket
-    STATUSES = %w[open in_progress waiting resolved closed].freeze
-    PRIORITIES = %w[low medium high urgent].freeze
-    DEFAULT_SLA_RULES = {
-      "low" => { warning_days: 14, breach_days: 21 },
-      "medium" => { warning_days: 7, breach_days: 10 },
-      "high" => { warning_days: 3, breach_days: 5 },
-      "urgent" => { warning_days: 1, breach_days: 2 }
-    }.freeze
-    DEFAULT_ESCALATION_RULES = {
-      "low" => { enabled: false, trigger: "sla_breached", target_role: "admin" },
-      "medium" => { enabled: true, trigger: "sla_breached", target_role: "admin" },
-      "high" => { enabled: true, trigger: "sla_warning", target_role: "admin" },
-      "urgent" => { enabled: true, trigger: "overdue", target_role: "admin" }
-    }.freeze
-    DEFAULT_WORKFLOWS = {
-      "general" => { name: "General", statuses: STATUSES, initial_status: "open" },
-      "bug" => { name: "Bug", statuses: STATUSES, initial_status: "open" },
-      "feature" => { name: "Feature", statuses: STATUSES, initial_status: "open" },
-      "incident" => { name: "Incident", statuses: STATUSES, initial_status: "open" }
-    }.freeze
-    DEFAULT_TRANSITION_ROLES = %w[admin agent].freeze
+    STATUSES = TicketPolicy::STATUSES
+    PRIORITIES = TicketPolicy::PRIORITIES
+    DEFAULT_SLA_RULES = TicketPolicy::DEFAULT_SLA_RULES
+    DEFAULT_ESCALATION_RULES = TicketPolicy::DEFAULT_ESCALATION_RULES
+    DEFAULT_WORKFLOWS = TicketPolicy::DEFAULT_WORKFLOWS
+    DEFAULT_TRANSITION_ROLES = TicketPolicy::DEFAULT_TRANSITION_ROLES
 
     class << self
+      def policy
+        @policy ||= TicketPolicy.new
+      end
+
+      def policy=(policy)
+        @policy = policy
+      end
+
       def sla_rules
-        @sla_rules ||= DEFAULT_SLA_RULES
+        policy.sla_rules
       end
 
       def sla_rules=(rules)
-        @sla_rules = normalize_sla_rules(rules)
+        policy.sla_rules = rules
       end
 
       def sla_rule_for(priority)
-        sla_rules[priority.to_s]
+        policy.sla_rule_for(priority)
       end
 
       def escalation_rules
-        @escalation_rules ||= DEFAULT_ESCALATION_RULES
+        policy.escalation_rules
       end
 
       def escalation_rules=(rules)
-        @escalation_rules = normalize_escalation_rules(rules)
+        policy.escalation_rules = rules
       end
 
       def escalation_rule_for(priority)
-        escalation_rules[priority.to_s]
+        policy.escalation_rule_for(priority)
       end
 
       def workflows
-        @workflows ||= normalize_workflows(DEFAULT_WORKFLOWS)
+        policy.workflows
       end
 
       def workflows=(workflows)
-        @workflows = normalize_workflows(workflows)
+        policy.workflows = workflows
       end
 
       def workflow_for(ticket_type)
-        workflows[ticket_type.to_s] || workflows["general"]
+        policy.workflow_for(ticket_type)
       end
 
       def workflow_statuses_for(ticket_type)
-        Array(workflow_for(ticket_type)["statuses"])
+        policy.workflow_statuses_for(ticket_type)
       end
 
       def initial_status_for(ticket_type)
-        workflow_for(ticket_type)["initial_status"].to_s
+        policy.initial_status_for(ticket_type)
       end
 
       def workflow_transitions_for(ticket_type)
-        workflow_for(ticket_type)["transitions"] || {}
+        policy.workflow_transitions_for(ticket_type)
       end
 
       def workflow_next_statuses_for(ticket_type, status)
-        Array(workflow_transitions_for(ticket_type)[status.to_s])
+        policy.workflow_next_statuses_for(ticket_type, status)
       end
 
       def workflow_transition_permissions_for(ticket_type)
-        workflow_for(ticket_type)["permissions"] || {}
+        policy.workflow_transition_permissions_for(ticket_type)
       end
 
       def workflow_transition_roles_for(ticket_type, from_status, to_status)
-        workflow_transition_permissions_for(ticket_type)
-          .fetch(from_status.to_s, {})
-          .fetch(to_status.to_s, DEFAULT_TRANSITION_ROLES)
+        policy.workflow_transition_roles_for(ticket_type, from_status, to_status)
       end
 
       def workflow_transition_allowed?(ticket_type, from_status, to_status, role)
-        role = role.to_s.strip
-        return true if role.empty?
-
-        workflow_transition_roles_for(ticket_type, from_status, to_status).include?(role)
-      end
-
-      private
-
-      def normalize_sla_rules(rules)
-        source = rules.is_a?(Hash) ? rules : {}
-        PRIORITIES.each_with_object({}) do |priority, normalized|
-          rule = source[priority] || source[priority.to_sym] || DEFAULT_SLA_RULES[priority]
-          normalized[priority] = {
-            warning_days: rule.fetch("warning_days", rule.fetch(:warning_days, DEFAULT_SLA_RULES[priority][:warning_days])).to_i,
-            breach_days: rule.fetch("breach_days", rule.fetch(:breach_days, DEFAULT_SLA_RULES[priority][:breach_days])).to_i
-          }
-        end
-      end
-
-      def normalize_escalation_rules(rules)
-        source = rules.is_a?(Hash) ? rules : {}
-        PRIORITIES.each_with_object({}) do |priority, normalized|
-          rule = source[priority] || source[priority.to_sym] || DEFAULT_ESCALATION_RULES[priority]
-          normalized[priority] = {
-            enabled: normalize_boolean(rule.fetch("enabled", rule.fetch(:enabled, DEFAULT_ESCALATION_RULES[priority][:enabled]))),
-            trigger: normalize_escalation_trigger(rule.fetch("trigger", rule.fetch(:trigger, DEFAULT_ESCALATION_RULES[priority][:trigger]))),
-            target_role: normalize_escalation_target_role(rule.fetch("target_role", rule.fetch(:target_role, DEFAULT_ESCALATION_RULES[priority][:target_role])))
-          }
-        end
-      end
-
-      def normalize_boolean(value)
-        case value
-        when true, false
-          value
-        else
-          %w[true yes on 1].include?(value.to_s.strip.downcase)
-        end
-      end
-
-      def normalize_escalation_trigger(value)
-        value = value.to_s.strip.downcase
-        value = "sla_breached" if value.empty?
-        return value if %w[sla_warning sla_breached overdue].include?(value)
-
-        raise ArgumentError, "invalid escalation trigger: #{value}"
-      end
-
-      def normalize_escalation_target_role(value)
-        value = value.to_s.strip.downcase
-        value = "admin" if value.empty?
-        return value if %w[admin agent viewer].include?(value)
-
-        raise ArgumentError, "invalid escalation target role: #{value}"
-      end
-
-      def normalize_workflows(workflows)
-        source = workflows.is_a?(Hash) ? workflows : {}
-        source.each_with_object({}) do |(ticket_type, workflow), normalized|
-          ticket_type = ticket_type.to_s.strip
-          next if ticket_type.empty?
-
-          workflow = workflow.is_a?(Hash) ? workflow : {}
-          statuses = normalize_workflow_statuses(workflow["statuses"] || workflow[:statuses] || STATUSES)
-          initial_status = normalize_workflow_status(
-            workflow["initial_status"] || workflow[:initial_status] || statuses.first || "open"
-          )
-          if statuses.empty?
-            raise ArgumentError, "workflow #{ticket_type} must define at least one status"
-          end
-          unless statuses.include?("closed")
-            raise ArgumentError, "workflow #{ticket_type} must include closed"
-          end
-          unless statuses.include?(initial_status)
-            raise ArgumentError, "workflow #{ticket_type} initial status must be in statuses"
-          end
-          transitions = normalize_workflow_transitions(
-            workflow["transitions"] || workflow[:transitions] || default_workflow_transitions(statuses),
-            statuses: statuses,
-            ticket_type: ticket_type
-          )
-          permissions = normalize_workflow_permissions(
-            workflow["permissions"] || workflow[:permissions] || default_workflow_permissions(transitions),
-            statuses: statuses,
-            ticket_type: ticket_type
-          )
-
-          normalized[ticket_type] = {
-            "name" => (workflow["name"] || workflow[:name] || ticket_type.tr("_", " ").capitalize).to_s,
-            "statuses" => statuses,
-            "initial_status" => initial_status,
-            "transitions" => transitions,
-            "permissions" => permissions
-          }
-        end
-      end
-
-      def normalize_workflow_statuses(statuses)
-        Array(statuses).map { |status| normalize_workflow_status(status) }.reject(&:empty?).uniq
-      end
-
-      def normalize_workflow_transitions(transitions, statuses:, ticket_type:)
-        source = transitions.is_a?(Hash) ? transitions : {}
-        source.each_with_object({}) do |(from_status, next_statuses), normalized|
-          from_status = normalize_workflow_status(from_status)
-          next if from_status.empty?
-
-          normalized[from_status] = normalize_workflow_next_statuses(next_statuses, allowed_statuses: statuses, ticket_type: ticket_type)
-        end
-      end
-
-      def normalize_workflow_next_statuses(next_statuses, allowed_statuses:, ticket_type:)
-        normalized = Array(next_statuses).map { |status| normalize_workflow_status(status) }.reject(&:empty?).uniq
-        invalid = normalized - allowed_statuses
-        raise ArgumentError, "workflow #{ticket_type} has invalid transition targets: #{invalid.join(', ')}" if invalid.any?
-
-        normalized
-      end
-
-      def default_workflow_transitions(statuses)
-        statuses.each_cons(2).each_with_object({}) do |(from_status, to_status), normalized|
-          normalized[from_status] ||= []
-          normalized[from_status] << to_status
-        end
-      end
-
-      def default_workflow_permissions(transitions)
-        transitions.each_with_object({}) do |(from_status, next_statuses), normalized|
-          normalized[from_status] = Array(next_statuses).each_with_object({}) do |to_status, per_from|
-            per_from[to_status] = DEFAULT_TRANSITION_ROLES.dup
-          end
-        end
-      end
-
-      def normalize_workflow_permissions(permissions, statuses:, ticket_type:)
-        source = permissions.is_a?(Hash) ? permissions : {}
-        source.each_with_object({}) do |(from_status, next_statuses), normalized|
-          from_status = normalize_workflow_status(from_status)
-          next if from_status.empty?
-          raise ArgumentError, "workflow #{ticket_type} has invalid permission source: #{from_status}" unless statuses.include?(from_status)
-
-          normalized[from_status] = {}
-          Hash(next_statuses).each do |to_status, roles|
-            to_status = normalize_workflow_status(to_status)
-            next if to_status.empty?
-            raise ArgumentError, "workflow #{ticket_type} has invalid permission target: #{to_status}" unless statuses.include?(to_status)
-
-            normalized_roles = Array(roles).map { |role| role.to_s.strip.downcase }.reject(&:empty?).uniq
-            normalized_roles = DEFAULT_TRANSITION_ROLES.dup if normalized_roles.empty?
-            invalid_roles = normalized_roles - %w[admin agent viewer]
-            raise ArgumentError, "workflow #{ticket_type} has invalid permission roles: #{invalid_roles.join(', ')}" if invalid_roles.any?
-
-            normalized[from_status][to_status] = normalized_roles
-          end
-        end
-      end
-
-      def normalize_workflow_status(status)
-        value = status.to_s.strip
-        return "" if value.empty?
-        return value if value.match?(/\A[a-zA-Z0-9_]+\z/)
-
-        value.tr(" ", "_")
+        policy.workflow_transition_allowed?(ticket_type, from_status, to_status, role)
       end
     end
 
@@ -341,34 +172,11 @@ module Helpdesk
       self.parent_id = parent_id.to_i.zero? ? nil : parent_id.to_i
       self.child_ids = Array(child_ids).map(&:to_i).reject(&:zero?).uniq.sort
       self.dependency_ids = Array(dependency_ids).map(&:to_i).reject(&:zero?).uniq.sort
-      self.comments = Array(comments).map do |comment|
-        {
-          "id" => comment["id"] || comment[:id],
-          "body" => comment["body"] || comment[:body],
-          "author" => comment["author"] || comment[:author] || "agent",
-          "created_at" => comment["created_at"] || comment[:created_at] || Time.now.utc.iso8601
-        }
-      end
-      self.internal_notes = Array(internal_notes).map do |note|
-        {
-          "id" => note["id"] || note[:id],
-          "body" => note["body"] || note[:body],
-          "author" => note["author"] || note[:author] || "agent",
-          "created_at" => note["created_at"] || note[:created_at] || Time.now.utc.iso8601
-        }
-      end
+      now = Time.now.utc
+      self.comments = TicketEntry.normalize_many(comments, now: now)
+      self.internal_notes = TicketEntry.normalize_many(internal_notes, now: now)
       self.watchers = Array(watchers).map { |watcher| watcher.to_i }.reject(&:zero?).uniq.sort
-      self.attachments = Array(attachments).each_with_index.map do |attachment, index|
-        {
-          "id" => attachment["id"] || attachment[:id] || (index + 1),
-          "name" => attachment["name"] || attachment[:name],
-          "content_type" => attachment["content_type"] || attachment[:content_type] || "",
-          "size" => (attachment["size"] || attachment[:size] || 0).to_i,
-          "description" => attachment["description"] || attachment[:description] || "",
-          "uploaded_by" => attachment["uploaded_by"] || attachment[:uploaded_by] || "agent",
-          "created_at" => attachment["created_at"] || attachment[:created_at] || Time.now.utc.iso8601
-        }
-      end
+      self.attachments = TicketAttachment.normalize_many(attachments, now: now)
       self.custom_fields = normalize_custom_fields(custom_fields)
       self.pinned = normalize_pinned(pinned)
       self.pinned_at = pinned? ? (pinned_at || Time.now.utc.iso8601) : nil
@@ -393,17 +201,7 @@ module Helpdesk
       self.reminder_at = normalize_reminder_at(attrs.fetch(:reminder_at, reminder_at))
       self.reminder_repeat = normalize_reminder_repeat(attrs.fetch(:reminder_repeat, reminder_repeat))
       self.tags = Array(attrs.fetch(:tags, tags)).map { |tag| tag.to_s.strip }.reject(&:empty?).uniq.sort
-      self.attachments = Array(attrs.fetch(:attachments, attachments)).each_with_index.map do |attachment, index|
-        {
-          "id" => attachment["id"] || attachment[:id] || (index + 1),
-          "name" => attachment["name"] || attachment[:name],
-          "content_type" => attachment["content_type"] || attachment[:content_type] || "",
-          "size" => (attachment["size"] || attachment[:size] || 0).to_i,
-          "description" => attachment["description"] || attachment[:description] || "",
-          "uploaded_by" => attachment["uploaded_by"] || attachment[:uploaded_by] || "agent",
-          "created_at" => attachment["created_at"] || attachment[:created_at] || Time.now.utc.iso8601
-        }
-      end
+      self.attachments = TicketAttachment.normalize_many(attrs.fetch(:attachments, attachments))
       self.custom_fields = normalize_custom_fields(attrs.fetch(:custom_fields, custom_fields))
       self.ticket_type = new_ticket_type
       self.merged_into_id = attrs.key?(:merged_into_id) ? attrs[:merged_into_id].to_i : merged_into_id.to_i
@@ -433,22 +231,12 @@ module Helpdesk
     end
 
     def add_comment(body:, author: "agent")
-      self.comments << {
-        "id" => next_comment_id,
-        "body" => body,
-        "author" => author,
-        "created_at" => Time.now.utc.iso8601
-      }
+      self.comments << TicketEntry.build(comments, body: body, author: author)
       self.updated_at = Time.now.utc.iso8601
     end
 
     def add_internal_note(body:, author: "agent")
-      self.internal_notes << {
-        "id" => next_internal_note_id,
-        "body" => body,
-        "author" => author,
-        "created_at" => Time.now.utc.iso8601
-      }
+      self.internal_notes << TicketEntry.build(internal_notes, body: body, author: author)
       self.updated_at = Time.now.utc.iso8601
     end
 
@@ -478,15 +266,14 @@ module Helpdesk
       name = name.to_s.strip
       return if name.empty?
 
-      self.attachments << {
-        "id" => next_attachment_id,
-        "name" => name,
-        "content_type" => content_type.to_s.strip,
-        "size" => size.to_i,
-        "description" => description.to_s.strip,
-        "uploaded_by" => uploaded_by.to_s.strip.empty? ? "agent" : uploaded_by.to_s.strip,
-        "created_at" => Time.now.utc.iso8601
-      }
+      self.attachments << TicketAttachment.build(
+        attachments,
+        name: name,
+        content_type: content_type,
+        size: size,
+        description: description,
+        uploaded_by: uploaded_by
+      )
       self.attachments = attachments.sort_by { |attachment| attachment["id"].to_i }
       self.updated_at = Time.now.utc.iso8601
     end
@@ -602,11 +389,11 @@ module Helpdesk
     end
 
     def duplicate_key
-      [normalized_duplicate_title, normalized_duplicate_description].join("|")
+      self.class.policy.duplicate_key(self)
     end
 
     def duplicate_title_key
-      normalized_duplicate_title
+      self.class.policy.duplicate_title_key(self)
     end
 
     def valid_for_type?
@@ -614,147 +401,75 @@ module Helpdesk
     end
 
     def validation_errors
-      errors = []
-      case ticket_type
-      when "bug"
-        errors << "bug tickets require a severity field" if custom_fields["severity"].to_s.strip.empty?
-      when "feature"
-        errors << "feature tickets require a requested_by field" if custom_fields["requested_by"].to_s.strip.empty?
-      when "incident"
-        errors << "incident tickets require an impact field" if custom_fields["impact"].to_s.strip.empty?
-      end
-      errors
+      self.class.policy.validation_errors(self)
     end
 
     def due_date
-      return nil if due_at.to_s.strip.empty?
-
-      Date.parse(due_at)
-    rescue ArgumentError
-      nil
+      self.class.policy.due_date(self)
     end
 
     def overdue?
-      return false if closed? || status == "resolved"
-
-      date = due_date
-      date && date < Date.today
+      self.class.policy.overdue?(self)
     end
 
     def sla_status(reference_time = Time.now.utc)
-      return "none" if closed? || status == "resolved" || archived?
-
-      age_days = sla_age_days(reference_time)
-      return "none" unless age_days
-
-      rule = sla_rule
-      return "none" unless rule
-
-      return "breached" if age_days >= rule[:breach_days]
-      return "warning" if age_days >= rule[:warning_days]
-
-      "ok"
+      self.class.policy.sla_status(self, reference_time)
     end
 
     def sla_warning?
-      %w[warning breached].include?(sla_status)
+      self.class.policy.sla_warning?(self)
     end
 
     def sla_breached?
-      sla_status == "breached"
+      self.class.policy.sla_breached?(self)
     end
 
     def sla_age_days(reference_time = Time.now.utc)
-      ((reference_time - Time.parse(created_at)) / 86_400).floor
-    rescue ArgumentError, TypeError
-      nil
+      self.class.policy.sla_age_days(self, reference_time)
     end
 
     def sla_rule
-      self.class.sla_rule_for(priority)
+      self.class.policy.sla_rule(self)
     end
 
     def escalation_rule
-      self.class.escalation_rule_for(priority)
+      self.class.policy.escalation_rule(self)
     end
 
     def escalation_status(reference_time = Time.now.utc)
-      return "none" if closed? || status == "resolved" || archived?
-
-      rule = escalation_rule
-      return "none" unless rule && rule[:enabled]
-
-      return "needed" if escalation_triggered?(rule, reference_time)
-
-      "none"
+      self.class.policy.escalation_status(self, reference_time)
     end
 
     def escalation_needed?
-      escalation_status == "needed"
+      self.class.policy.escalation_needed?(self)
     end
 
     def escalation_target_role
-      rule = escalation_rule
-      rule ? rule[:target_role] : nil
+      self.class.policy.escalation_target_role(self)
     end
 
     def escalation_trigger
-      rule = escalation_rule
-      rule ? rule[:trigger] : nil
+      self.class.policy.escalation_trigger(self)
     end
 
     def can_transition_to?(to_status, role: nil)
-      self.class.workflow_transition_allowed?(ticket_type, status, to_status, role)
+      self.class.policy.can_transition?(self, to_status, role: role)
     end
 
     def escalation_triggered?(rule = escalation_rule, _reference_time = Time.now.utc)
-      return false unless rule
-
-      case rule[:trigger]
-      when "sla_warning"
-        sla_warning?
-      when "sla_breached"
-        sla_breached?
-      when "overdue"
-        overdue?
-      else
-        false
-      end
+      self.class.policy.escalation_triggered?(self, rule)
     end
 
     def reminder_due?
-      return false if closed?
-      return false if reminder_at.to_s.strip.empty?
-
-      Time.parse(reminder_at) <= Time.now.utc
-    rescue ArgumentError
-      false
+      self.class.policy.reminder_due?(self)
     end
 
     def recurring_reminder?
-      !reminder_repeat.to_s.strip.empty?
+      self.class.policy.recurring_reminder?(self)
     end
 
     def advance_reminder!
-      return self unless recurring_reminder?
-
-      next_time =
-        case reminder_repeat
-        when "daily"
-          Time.parse(reminder_at) + 86_400
-        when "weekly"
-          Time.parse(reminder_at) + 604_800
-        when "monthly"
-          Time.parse(reminder_at) + 2_592_000
-        else
-          nil
-        end
-      self.reminder_at = next_time&.utc&.iso8601
-      self.updated_at = Time.now.utc.iso8601
-      self
-    rescue ArgumentError
-      self.reminder_at = nil
-      self
+      self.class.policy.advance_reminder!(self)
     end
 
     def to_h
@@ -795,51 +510,23 @@ module Helpdesk
     private
 
     def normalize_status(value, ticket_type: self.ticket_type)
-      value = value.to_s.strip
-      allowed = self.class.workflow_statuses_for(ticket_type)
-      initial = self.class.initial_status_for(ticket_type)
-      return initial if value.empty? && !initial.empty?
-      return value if allowed.include?(value)
-
-      normalized = value.tr(" ", "_")
-      return normalized if allowed.include?(normalized)
-
-      raise ArgumentError, "invalid status: #{value}"
+      self.class.policy.normalize_status(value, ticket_type: ticket_type)
     end
 
     def normalize_priority(value)
-      value = value.to_s.strip
-      return "medium" if value.empty?
-      return value if PRIORITIES.include?(value)
-
-      raise ArgumentError, "invalid priority: #{value}"
+      self.class.policy.normalize_priority(value)
     end
 
     def normalize_due_at(value)
-      value = value.to_s.strip
-      return nil if value.empty?
-
-      Date.parse(value).iso8601
-    rescue ArgumentError
-      raise ArgumentError, "invalid due date: #{value}"
+      self.class.policy.normalize_due_at(value)
     end
 
     def normalize_reminder_at(value)
-      value = value.to_s.strip
-      return nil if value.empty?
-
-      Time.parse(value).utc.iso8601
-    rescue ArgumentError
-      raise ArgumentError, "invalid reminder time: #{value}"
+      self.class.policy.normalize_reminder_at(value)
     end
 
     def normalize_reminder_repeat(value)
-      value = value.to_s.strip
-      return nil if value.empty?
-
-      return value if %w[daily weekly monthly].include?(value)
-
-      raise ArgumentError, "invalid reminder repeat: #{value}"
+      self.class.policy.normalize_reminder_repeat(value)
     end
 
     def normalize_pinned(value)
@@ -959,31 +646,7 @@ module Helpdesk
     end
 
     def normalize_ticket_type(value)
-      value = value.to_s.strip.downcase
-      value = "general" if value.empty?
-      return value if %w[general bug feature incident].include?(value)
-
-      raise ArgumentError, "invalid ticket type: #{value}"
-    end
-
-    def next_comment_id
-      (comments.map { |comment| comment["id"].to_i }.max || 0) + 1
-    end
-
-    def next_internal_note_id
-      (internal_notes.map { |note| note["id"].to_i }.max || 0) + 1
-    end
-
-    def next_attachment_id
-      (attachments.map { |attachment| attachment["id"].to_i }.max || 0) + 1
-    end
-
-    def normalized_duplicate_title
-      title.to_s.downcase.gsub(/[^a-z0-9]+/, " ").strip.squeeze(" ")
-    end
-
-    def normalized_duplicate_description
-      description.to_s.downcase.gsub(/[^a-z0-9]+/, " ").strip.squeeze(" ")
+      self.class.policy.normalize_ticket_type(value)
     end
   end
 end

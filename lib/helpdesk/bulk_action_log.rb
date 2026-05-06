@@ -1,5 +1,5 @@
-require "time"
 require "helpdesk/json_file"
+require "helpdesk/log_entry"
 
 module Helpdesk
   class BulkActionLog
@@ -11,13 +11,7 @@ module Helpdesk
 
     def append(action:, rows:, metadata: {})
       entries = load_data
-      entries << {
-        "id" => next_id(entries),
-        "action" => action,
-        "rows" => rows,
-        "metadata" => metadata,
-        "created_at" => Time.now.utc.iso8601
-      }
+      entries << LogEntry.bulk_action(id: next_id(entries), action: action, rows: rows, metadata: metadata)
       save!(entries)
     end
 

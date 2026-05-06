@@ -41,4 +41,64 @@ class WorkflowApiTest < Minitest::Test
       assert_equal false, revoked["enabled"]
     end
   end
+
+  def test_cli_workflow_permissions_reject_disallowed_status_transition
+    with_tmpdir do |dir|
+      cli = build_cli(dir, role: "agent")
+      cli.instance_variable_get(:@workflows).upsert(
+        "general",
+        statuses: ["open", "closed"],
+        initial_status: "open",
+        transitions: { "open" => ["closed"] },
+        permissions: { "open" => { "closed" => ["admin"] } }
+      )
+      cli.send(:reload_ticket_workflows!)
+      ticket = cli.instance_variable_get(:@store).create(title: "Needs approval")
+
+      output = capture_stdout do
+        assert_equal :handled, cli.send(:dispatch_command, "status", [ticket.id.to_s, "closed"])
+      end
+
+      assert_includes output, "transition open -> closed is not permitted for agent"
+      assert_equal "open", cli.instance_variable_get(:@store).find(ticket.id).status
+    end
+  end
+
+  def test_api_command_reports_rate_limits_with_error_envelope
+    with_tmpdir do |dir|
+      cli = build_cli(dir, role: "admin")
+      cli.instance_variable_set(:@api_rate_limit, 1)
+      token = cli.instance_variable_get(:@api_tokens).create(name: "api", user_id: cli.instance_variable_get(:@current_user).id)
+
+      output = capture_stdout do
+        cli.send(:api, ["--token", token["token"], "GET", "/tickets"])
+        cli.send(:api, ["--token", token["token"], "GET", "/tickets"])
+      end
+
+      assert_includes output, '"status": 200'
+      assert_includes output, '"status": 429'
+      assert_includes output, '"error": "API rate limit exceeded."'
+      assert_includes output, '"rate_limit_remaining": 0'
+    end
+  end
+
+  def test_api_command_invalidates_cached_ticket_list_after_write
+    with_tmpdir do |dir|
+      cli = build_cli(dir, role: "admin")
+      token = cli.instance_variable_get(:@api_tokens).create(name: "api", user_id: cli.instance_variable_get(:@current_user).id)
+
+      first_get = capture_stdout do
+        cli.send(:api, ["--token", token["token"], "GET", "/tickets"])
+      end
+      capture_stdout do
+        cli.send(:api, ["--token", token["token"], "POST", "/tickets", JSON.generate("title" => "CreatedViaApi")])
+      end
+      second_get = capture_stdout do
+        cli.send(:api, ["--token", token["token"], "GET", "/tickets"])
+      end
+
+      refute_includes first_get, "CreatedViaApi"
+      assert_includes second_get, "CreatedViaApi"
+    end
+  end
 end
