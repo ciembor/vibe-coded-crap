@@ -1,0 +1,1 @@
+This repository contains vibe-coded crap generated with Codex, GPT-5.4 mini, reasoning medium. It is the result of continuous development across 80 tasks from BACKLOG.md. I use it to test various AGENTS.md files and skills in the context of refactoring.
